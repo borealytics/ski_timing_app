@@ -441,42 +441,67 @@ class MainWindow(tk.Tk):
         """Affiche les différences trouvées"""
         diff_window = tk.Toplevel(self)
         diff_window.title("Validation - Différences trouvées")
-        diff_window.geometry("800x500")
-        
+        diff_window.geometry("950x500")
+
         frame = ttk.Frame(diff_window, padding="20")
         frame.pack(fill=tk.BOTH, expand=True)
-        
+
         ttk.Label(
             frame,
             text=f"{len(differences)} différence(s) trouvée(s)",
             font=('Arial', 14, 'bold')
         ).pack(pady=10)
-        
+
         # Treeview
         tree_frame = ttk.Frame(frame)
         tree_frame.pack(fill=tk.BOTH, expand=True)
-        
+
         scrollbar = ttk.Scrollbar(tree_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
+
         tree = ttk.Treeview(
             tree_frame,
-            columns=('bib', 'manual', 'imported', 'diff'),
+            columns=('bib', 'name', 'category', 'club', 'manual', 'imported', 'diff'),
             show='headings',
             yscrollcommand=scrollbar.set
         )
         scrollbar.config(command=tree.yview)
-        
+
         tree.heading('bib', text='Bib')
+        tree.heading('name', text='Nom')
+        tree.heading('category', text='Cat.')
+        tree.heading('club', text='Club')
         tree.heading('manual', text='Manuel')
         tree.heading('imported', text='Importé')
         tree.heading('diff', text='Différence')
-        
+
+        tree.column('bib', width=50, anchor='center')
+        tree.column('name', width=150)
+        tree.column('category', width=50, anchor='center')
+        tree.column('club', width=120)
+        tree.column('manual', width=80, anchor='center')
+        tree.column('imported', width=80, anchor='center')
+        tree.column('diff', width=150)
+
         tree.pack(fill=tk.BOTH, expand=True)
-        
+
         for diff in differences:
+            # Trouver l'athlète correspondant
+            athlete = next((a for a in self.race.athletes if a.bib == diff['bib']), None)
+            if athlete:
+                name = f"{athlete.first_name} {athlete.last_name}"
+                category = athlete.category
+                club = athlete.team
+            else:
+                name = "Inconnu"
+                category = ""
+                club = ""
+
             tree.insert('', tk.END, values=(
                 diff['bib'],
+                name,
+                category,
+                club,
                 diff['manual'],
                 diff['imported'],
                 diff['diff']
