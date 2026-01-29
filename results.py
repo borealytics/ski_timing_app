@@ -72,38 +72,59 @@ class ResultsCalculator:
     def _calculate_total(self, times: List, statuses: List) -> tuple:
         """
         Calcule le temps total selon la méthode configurée
-        
+
+        DSQ, DNF et DNS sont traités de la même façon: le temps de ce run n'est pas valide.
+        Le coureur peut quand même être classé s'il a assez de temps valides dans les autres runs.
+
         Returns:
             (total_seconds, status)
         """
         method = self.race.config.calculation_method
-        
-        # Vérifier les statuts spéciaux
-        if 'DSQ' in statuses:
-            return None, 'DSQ'
-        if all(s == 'DNS' for s in statuses):
-            return None, 'DNS'
-        
-        # Filtrer les temps valides
+
+        # Vérifier si tous les runs sont sans temps valide
+        if all(s in ('DNS', 'DNF', 'DSQ', 'PENDING') for s in statuses):
+            # Déterminer le statut à afficher
+            if all(s == 'DNS' for s in statuses):
+                return None, 'DNS'
+            elif all(s == 'DSQ' for s in statuses):
+                return None, 'DSQ'
+            elif 'DNF' in statuses:
+                return None, 'DNF'
+            elif 'DSQ' in statuses:
+                return None, 'DSQ'
+            else:
+                return None, 'DNS'
+
+        # Filtrer les temps valides (ignorer DNS, DNF, DSQ)
         valid_times = [t for t in times if t is not None]
-        
+
         if method == 'BEST_1':
             if len(valid_times) < 1:
-                return None, 'DNF' if 'DNF' in statuses else 'DNS'
+                return None, self._get_failure_status(statuses)
             return min(valid_times), 'FINISHED'
-        
+
         elif method == 'BEST_2':
             if len(valid_times) < 2:
-                return None, 'DNF' if 'DNF' in statuses else 'DNS'
+                return None, self._get_failure_status(statuses)
             sorted_times = sorted(valid_times)
             return sum(sorted_times[:2]), 'FINISHED'
-        
+
         elif method == 'SUM_3':
             if len(valid_times) < 3:
-                return None, 'DNF' if 'DNF' in statuses else 'DNS'
+                return None, self._get_failure_status(statuses)
             return sum(valid_times), 'FINISHED'
-        
+
         return None, 'UNKNOWN'
+
+    def _get_failure_status(self, statuses: List) -> str:
+        """Détermine le statut à afficher quand il n'y a pas assez de temps valides"""
+        if 'DNF' in statuses:
+            return 'DNF'
+        elif 'DSQ' in statuses:
+            return 'DSQ'
+        elif 'DNS' in statuses:
+            return 'DNS'
+        return 'DNF'
     
     def _rank_results(self, results: List[Dict]) -> List[Dict]:
         """

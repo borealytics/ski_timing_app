@@ -509,27 +509,27 @@ class MainWindow(tk.Tk):
         """Affiche les résultats finaux"""
         calculator = ResultsCalculator(self.race)
         results = calculator.calculate_final_results()
-        
+
         results_window = tk.Toplevel(self)
         results_window.title("Résultats Finaux")
         results_window.geometry("1000x600")
-        
+
         frame = ttk.Frame(results_window, padding="20")
         frame.pack(fill=tk.BOTH, expand=True)
-        
+
         ttk.Label(
             frame,
             text="Résultats Finaux",
             font=('Arial', 16, 'bold')
         ).pack(pady=10)
-        
+
         # Treeview
         tree_frame = ttk.Frame(frame)
         tree_frame.pack(fill=tk.BOTH, expand=True)
-        
+
         scrollbar = ttk.Scrollbar(tree_frame)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
+
         columns = ['rank', 'bib', 'name', 'category', 'sex', 'total']
         if self.race.config.num_runs >= 1:
             columns.append('run1')
@@ -537,7 +537,7 @@ class MainWindow(tk.Tk):
             columns.append('run2')
         if self.race.config.num_runs >= 3:
             columns.append('run3')
-        
+
         tree = ttk.Treeview(
             tree_frame,
             columns=columns,
@@ -545,28 +545,35 @@ class MainWindow(tk.Tk):
             yscrollcommand=scrollbar.set
         )
         scrollbar.config(command=tree.yview)
-        
-        tree.heading('rank', text='Rang')
-        tree.heading('bib', text='Bib')
-        tree.heading('name', text='Nom')
-        tree.heading('category', text='Cat.')
-        tree.heading('sex', text='Sexe')
-        tree.heading('total', text='Total')
-        if self.race.config.num_runs >= 1:
-            tree.heading('run1', text='Run 1')
-        if self.race.config.num_runs >= 2:
-            tree.heading('run2', text='Run 2')
-        if self.race.config.num_runs >= 3:
-            tree.heading('run3', text='Run 3')
-        
+
+        # En-têtes des colonnes
+        headings = {
+            'rank': 'Rang',
+            'bib': 'Bib',
+            'name': 'Nom',
+            'category': 'Cat.',
+            'sex': 'Sexe',
+            'total': 'Total',
+            'run1': 'Run 1',
+            'run2': 'Run 2',
+            'run3': 'Run 3'
+        }
+
+        for col in columns:
+            tree.heading(col, text=headings.get(col, col))
+
         tree.pack(fill=tk.BOTH, expand=True)
-        
+
+        # Préparer les données et calculer les largeurs
+        all_values = []
+        col_widths = {col: len(headings.get(col, col)) for col in columns}
+
         for result in results:
             athlete = next(a for a in self.race.athletes if a.bib == result['bib'])
             values = [
-                result['rank'] or '',
-                result['bib'],
-                f"{athlete.last_name} {athlete.first_name}",
+                str(result['rank']) if result['rank'] else '',
+                str(result['bib']),
+                f"{athlete.first_name} {athlete.last_name}",
                 result['category'],
                 result['sex'],
                 result['total_display']
@@ -577,7 +584,20 @@ class MainWindow(tk.Tk):
                 values.append(result.get('run2', ''))
             if self.race.config.num_runs >= 3:
                 values.append(result.get('run3', ''))
-            
+
+            all_values.append(values)
+
+            # Mettre à jour les largeurs maximales
+            for i, col in enumerate(columns):
+                col_widths[col] = max(col_widths[col], len(str(values[i])))
+
+        # Appliquer les largeurs (environ 8 pixels par caractère + marge)
+        for col in columns:
+            width = col_widths[col] * 9 + 20
+            tree.column(col, width=width, minwidth=50)
+
+        # Insérer les données
+        for values in all_values:
             tree.insert('', tk.END, values=values)
     
     def _export_podiums(self):
