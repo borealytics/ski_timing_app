@@ -17,6 +17,12 @@ class TimingInterface(tk.Toplevel):
         self.run = run
         self.on_complete = on_complete
         self.current_index = 0
+        self._updating_fields = False  # Flag pour éviter auto-avancement lors du pré-remplissage
+        self._sec_invalid = False  # Flag pour validation des secondes
+
+        # Créer le style pour les champs en erreur
+        style = ttk.Style()
+        style.configure('Error.TEntry', fieldbackground='#ffcccc')
 
         self.title(f"Chronometrage - Run {run.number}")
         self.geometry("950x600")
@@ -187,26 +193,36 @@ class TimingInterface(tk.Toplevel):
         input_frame = ttk.Frame(time_frame)
         input_frame.pack()
 
-        # Minutes
+        # Variables pour les champs
+        self.min_var = tk.StringVar()
+        self.sec_var = tk.StringVar()
+        self.cent_var = tk.StringVar()
+
+        # Minutes (1 caractère max)
         ttk.Label(input_frame, text="Min:", font=('Arial', 12)).grid(row=0, column=0, padx=5)
-        self.min_entry = ttk.Entry(input_frame, width=3, font=('Arial', 18))
+        self.min_entry = ttk.Entry(input_frame, width=2, font=('Arial', 18), textvariable=self.min_var)
         self.min_entry.grid(row=0, column=1, padx=5)
 
         ttk.Label(input_frame, text=":", font=('Arial', 18)).grid(row=0, column=2)
 
-        # Secondes
+        # Secondes (2 caractères max, validation 0-59)
         ttk.Label(input_frame, text="Sec:", font=('Arial', 12)).grid(row=0, column=3, padx=5)
-        self.sec_entry = ttk.Entry(input_frame, width=3, font=('Arial', 18))
+        self.sec_entry = ttk.Entry(input_frame, width=3, font=('Arial', 18), textvariable=self.sec_var)
         self.sec_entry.grid(row=0, column=4, padx=5)
 
         ttk.Label(input_frame, text=".", font=('Arial', 18)).grid(row=0, column=5)
 
-        # Centièmes
+        # Centièmes (2 caractères max)
         ttk.Label(input_frame, text="Cent:", font=('Arial', 12)).grid(row=0, column=6, padx=5)
-        self.cent_entry = ttk.Entry(input_frame, width=3, font=('Arial', 18))
+        self.cent_entry = ttk.Entry(input_frame, width=3, font=('Arial', 18), textvariable=self.cent_var)
         self.cent_entry.grid(row=0, column=7, padx=5)
 
-        # Bindings pour navigation entre champs
+        # Traces pour auto-avancement
+        self.min_var.trace_add('write', self._on_min_change)
+        self.sec_var.trace_add('write', self._on_sec_change)
+        self.cent_var.trace_add('write', self._on_cent_change)
+
+        # Bindings pour navigation entre champs (Return)
         self.min_entry.bind('<Return>', lambda e: self.sec_entry.focus())
         self.sec_entry.bind('<Return>', lambda e: self.cent_entry.focus())
         self.cent_entry.bind('<Return>', lambda e: self._save_time())
@@ -271,6 +287,64 @@ class TimingInterface(tk.Toplevel):
             command=self._finish,
             width=12
         ).pack(side=tk.RIGHT)
+
+    def _on_min_change(self, *args):
+        """Gère le changement du champ minutes"""
+        if self._updating_fields:
+            return
+        val = self.min_var.get()
+        # Garder seulement les chiffres
+        filtered = ''.join(c for c in val if c.isdigit())
+        # Limiter à 1 caractère
+        if len(filtered) > 1:
+            filtered = filtered[:1]
+        if filtered != val:
+            self._updating_fields = True
+            self.min_var.set(filtered)
+            self._updating_fields = False
+        # Auto-avancer si 1 caractère saisi
+        if len(filtered) == 1:
+            self.sec_entry.focus()
+
+    def _on_sec_change(self, *args):
+        """Gère le changement du champ secondes"""
+        if self._updating_fields:
+            return
+        val = self.sec_var.get()
+        # Garder seulement les chiffres
+        filtered = ''.join(c for c in val if c.isdigit())
+        # Limiter à 2 caractères
+        if len(filtered) > 2:
+            filtered = filtered[:2]
+        if filtered != val:
+            self._updating_fields = True
+            self.sec_var.set(filtered)
+            self._updating_fields = False
+        # Valider max 59 - mettre en rouge si invalide
+        if filtered and int(filtered) > 59:
+            self.sec_entry.configure(style='Error.TEntry')
+            self._sec_invalid = True
+        else:
+            self.sec_entry.configure(style='TEntry')
+            self._sec_invalid = False
+        # Auto-avancer si 2 caractères saisis et valide
+        if len(filtered) == 2 and not self._sec_invalid:
+            self.cent_entry.focus()
+
+    def _on_cent_change(self, *args):
+        """Gère le changement du champ centièmes"""
+        if self._updating_fields:
+            return
+        val = self.cent_var.get()
+        # Garder seulement les chiffres
+        filtered = ''.join(c for c in val if c.isdigit())
+        # Limiter à 2 caractères
+        if len(filtered) > 2:
+            filtered = filtered[:2]
+        if filtered != val:
+            self._updating_fields = True
+            self.cent_var.set(filtered)
+            self._updating_fields = False
 
     def _update_athlete_list(self):
         """Met à jour la liste des coureurs"""
@@ -353,29 +427,30 @@ class TimingInterface(tk.Toplevel):
         completed, total = self.run.get_completion_rate()
         self.progress_label.config(text=f"[{completed}/{total}]")
 
-        # Pré-remplir si déjà saisi
+        # Pré-remplir si déjà saisi (désactiver auto-avancement)
+        self._updating_fields = True
+        self._sec_invalid = False
+        self.sec_entry.configure(style='TEntry')
         if result and result.status != 'PENDING':
             if result.status == 'FINISHED':
                 # Parser le temps pour pré-remplir
                 time_str = result.time_display
                 if ':' in time_str:
                     parts = time_str.split(':')
-                    self.min_entry.delete(0, tk.END)
-                    self.min_entry.insert(0, parts[0])
+                    self.min_var.set(parts[0])
                     sec_parts = parts[1].split('.')
-                    self.sec_entry.delete(0, tk.END)
-                    self.sec_entry.insert(0, sec_parts[0])
-                    self.cent_entry.delete(0, tk.END)
-                    self.cent_entry.insert(0, sec_parts[1])
+                    self.sec_var.set(sec_parts[0])
+                    self.cent_var.set(sec_parts[1])
             else:
-                self.min_entry.delete(0, tk.END)
-                self.sec_entry.delete(0, tk.END)
-                self.cent_entry.delete(0, tk.END)
+                self.min_var.set('')
+                self.sec_var.set('')
+                self.cent_var.set('')
         else:
             # Vider les champs
-            self.min_entry.delete(0, tk.END)
-            self.sec_entry.delete(0, tk.END)
-            self.cent_entry.delete(0, tk.END)
+            self.min_var.set('')
+            self.sec_var.set('')
+            self.cent_var.set('')
+        self._updating_fields = False
 
         # Focus sur le premier champ
         self.min_entry.focus()
@@ -492,6 +567,12 @@ class TimingInterface(tk.Toplevel):
     def _save_time(self):
         """Enregistre le temps saisi"""
         athlete = self.run.athletes[self.current_index]
+
+        # Vérifier si les secondes sont invalides
+        if self._sec_invalid:
+            messagebox.showwarning("Secondes invalides", "Les secondes doivent être entre 0 et 59")
+            self.sec_entry.focus()
+            return
 
         # Valider l'entrée
         valid, error = validate_time_input(
