@@ -132,6 +132,59 @@ class TimingInterface(tk.Toplevel):
             width=5
         ).pack(side=tk.LEFT)
 
+        # Frame pour le tri
+        sort_frame = ttk.LabelFrame(parent, text="Ordre de tri", padding="5")
+        sort_frame.pack(fill=tk.X, pady=10)
+
+        sort_options = [
+            ('', '(aucun)'),
+            ('category', 'Catégorie'),
+            ('sex', 'Sexe'),
+            ('bib_asc', 'Dossard ↑'),
+            ('bib_desc', 'Dossard ↓'),
+        ]
+
+        # Déterminer les valeurs par défaut selon le numéro du run
+        if self.run.number == 2:
+            default_sort = ['category', 'bib_desc', '']
+        else:
+            default_sort = ['category', 'bib_asc', '']
+
+        # Niveau 1
+        ttk.Label(sort_frame, text="1:", font=('Arial', 9)).grid(row=0, column=0, padx=2)
+        self.sort1_var = tk.StringVar(value=default_sort[0])
+        sort1_combo = ttk.Combobox(sort_frame, textvariable=self.sort1_var, width=10, state='readonly')
+        sort1_combo['values'] = [opt[1] for opt in sort_options]
+        sort1_combo.current([opt[0] for opt in sort_options].index(default_sort[0]))
+        sort1_combo.grid(row=0, column=1, padx=2)
+
+        # Niveau 2
+        ttk.Label(sort_frame, text="2:", font=('Arial', 9)).grid(row=0, column=2, padx=2)
+        self.sort2_var = tk.StringVar(value=default_sort[1])
+        sort2_combo = ttk.Combobox(sort_frame, textvariable=self.sort2_var, width=10, state='readonly')
+        sort2_combo['values'] = [opt[1] for opt in sort_options]
+        sort2_combo.current([opt[0] for opt in sort_options].index(default_sort[1]))
+        sort2_combo.grid(row=0, column=3, padx=2)
+
+        # Niveau 3
+        ttk.Label(sort_frame, text="3:", font=('Arial', 9)).grid(row=0, column=4, padx=2)
+        self.sort3_var = tk.StringVar(value=default_sort[2])
+        sort3_combo = ttk.Combobox(sort_frame, textvariable=self.sort3_var, width=10, state='readonly')
+        sort3_combo['values'] = [opt[1] for opt in sort_options]
+        sort3_combo.current([opt[0] for opt in sort_options].index(default_sort[2]))
+        sort3_combo.grid(row=0, column=5, padx=2)
+
+        # Stocker la correspondance label -> valeur
+        self._sort_options_map = {opt[1]: opt[0] for opt in sort_options}
+
+        # Bouton appliquer
+        ttk.Button(
+            sort_frame,
+            text="Trier",
+            command=self._apply_sort,
+            width=6
+        ).grid(row=0, column=6, padx=5)
+
     def _create_timing_panel(self, parent):
         """Crée le panneau de saisie du temps"""
 
@@ -294,6 +347,70 @@ class TimingInterface(tk.Toplevel):
             command=self._finish,
             width=12
         ).pack(side=tk.RIGHT)
+
+    def _category_sort_key(self, category: str) -> int:
+        """Extrait le nombre de la catégorie pour le tri (U6->6, U10->10, etc.)"""
+        import re
+        match = re.search(r'\d+', category)
+        if match:
+            return int(match.group())
+        return 999  # Catégories sans nombre à la fin
+
+    def _apply_sort(self):
+        """Applique le tri sélectionné"""
+        # Récupérer les critères de tri
+        sort1 = self._sort_options_map.get(self.sort1_var.get(), '')
+        sort2 = self._sort_options_map.get(self.sort2_var.get(), '')
+        sort3 = self._sort_options_map.get(self.sort3_var.get(), '')
+
+        order = [s for s in [sort1, sort2, sort3] if s]
+
+        if not order:
+            messagebox.showwarning("Attention", "Veuillez sélectionner au moins un critère de tri")
+            return
+
+        # Construire les clés de tri
+        from functools import cmp_to_key
+
+        keys = []
+        reverse_flags = []
+
+        for criterion in order:
+            if criterion == 'category':
+                keys.append(lambda a: self._category_sort_key(a.category))
+                reverse_flags.append(False)
+            elif criterion == 'sex':
+                keys.append(lambda a: a.sex)
+                reverse_flags.append(False)
+            elif criterion == 'bib_asc':
+                keys.append(lambda a: a.bib)
+                reverse_flags.append(False)
+            elif criterion == 'bib_desc':
+                keys.append(lambda a: a.bib)
+                reverse_flags.append(True)
+
+        def compare(a1, a2):
+            for key_func, reverse in zip(keys, reverse_flags):
+                val1 = key_func(a1)
+                val2 = key_func(a2)
+                if val1 < val2:
+                    return 1 if reverse else -1
+                elif val1 > val2:
+                    return -1 if reverse else 1
+            return 0
+
+        # Trier les athlètes
+        self.run.athletes.sort(key=cmp_to_key(compare))
+
+        # Réinitialiser à la position 0
+        self.current_index = 0
+        self._update_display()
+
+        # Sauvegarder
+        if self.on_save:
+            self.on_save()
+
+        messagebox.showinfo("Tri appliqué", "L'ordre des coureurs a été mis à jour")
 
     def _on_min_change(self, *args):
         """Gère le changement du champ minutes"""
