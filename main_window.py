@@ -18,15 +18,31 @@ class MainWindow(tk.Tk):
     
     def __init__(self):
         super().__init__()
-        
+
         self.title("Ski Timing Manager")
         self.geometry("900x700")
-        
+
         self.race = None
         self.current_file = None
-        
+
+        # Confirmation avant de fermer l'application
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
         self._create_menu()
         self._show_welcome_screen()
+
+    def _on_close(self):
+        """Gère la fermeture de l'application"""
+        if self.race:
+            response = messagebox.askyesnocancel(
+                "Quitter",
+                "Voulez-vous sauvegarder la course avant de quitter?"
+            )
+            if response is None:  # Cancel
+                return
+            if response:  # Yes - sauvegarder
+                self._save_race()
+        self.destroy()
     
     def _create_menu(self):
         """Crée la barre de menu"""
@@ -381,7 +397,12 @@ class MainWindow(tk.Tk):
     
     def _open_timing(self, run):
         """Ouvre l'interface de chronométrage"""
-        TimingInterface(self, run, on_complete=lambda: self._show_race_management())
+        def on_save():
+            # Sauvegarder automatiquement après chaque temps
+            if self.current_file:
+                self.race.save(self.current_file)
+
+        TimingInterface(self, run, on_complete=lambda: self._show_race_management(), on_save=on_save)
 
     def _open_athlete_manager(self):
         """Ouvre la fenêtre de gestion des coureurs"""

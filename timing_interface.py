@@ -11,11 +11,12 @@ from utils import validate_time_input, format_time_msscc
 class TimingInterface(tk.Toplevel):
     """Interface de saisie des temps pour un run"""
 
-    def __init__(self, parent, run: Run, on_complete: Optional[Callable] = None):
+    def __init__(self, parent, run: Run, on_complete: Optional[Callable] = None, on_save: Optional[Callable] = None):
         super().__init__(parent)
 
         self.run = run
         self.on_complete = on_complete
+        self.on_save = on_save
         self.current_index = 0
         self._updating_fields = False  # Flag pour éviter auto-avancement lors du pré-remplissage
         self._sec_invalid = False  # Flag pour validation des secondes
@@ -512,6 +513,10 @@ class TimingInterface(tk.Toplevel):
         result.set_time(total_seconds, time_display)
         self.run.set_result(athlete.bib, result)
 
+        # Sauvegarde automatique
+        if self.on_save:
+            self.on_save()
+
         return True
 
     def _go_to_athlete(self, index: int):
@@ -607,6 +612,10 @@ class TimingInterface(tk.Toplevel):
         result.set_time(total_seconds, time_display)
         self.run.set_result(athlete.bib, result)
 
+        # Sauvegarde automatique
+        if self.on_save:
+            self.on_save()
+
         # Passer au suivant
         self.current_index += 1
         self._update_display()
@@ -618,6 +627,10 @@ class TimingInterface(tk.Toplevel):
         result = RunResult(bib=athlete.bib)
         result.set_status(status)
         self.run.set_result(athlete.bib, result)
+
+        # Sauvegarde automatique
+        if self.on_save:
+            self.on_save()
 
         # Passer au suivant
         self.current_index += 1
