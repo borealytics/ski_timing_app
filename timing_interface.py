@@ -94,7 +94,7 @@ class TimingInterface(tk.Toplevel):
 
         self.athlete_tree.column('order', width=30, anchor='center')
         self.athlete_tree.column('bib', width=40, anchor='center')
-        self.athlete_tree.column('name', width=100)
+        self.athlete_tree.column('name', width=130)
         self.athlete_tree.column('cat', width=40, anchor='center')
         self.athlete_tree.column('sex', width=25, anchor='center')
         self.athlete_tree.column('club', width=70)
@@ -396,7 +396,7 @@ class TimingInterface(tk.Toplevel):
             item_id = self.athlete_tree.insert('', tk.END, values=(
                 i + 1,
                 athlete.bib,
-                athlete.last_name,
+                f"{athlete.first_name} {athlete.last_name}",
                 athlete.category,
                 athlete.sex,
                 athlete.team,
