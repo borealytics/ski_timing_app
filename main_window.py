@@ -259,16 +259,27 @@ class MainWindow(tk.Tk):
         self.race.config.race_name = self.race_name_var.get()
         self.race.config.num_runs = self.num_runs_var.get()
         self.race.config.calculation_method = self.calc_method_var.get()
-        
+
         # Générer les runs
         self.race.generate_runs()
-        
-        # Sauvegarder automatiquement
+
+        # Demander où sauvegarder
         if not self.current_file:
-            self.current_file = f"course_{datetime.date.today()}.json"
+            default_name = f"course_{datetime.date.today()}.json"
+            filepath = filedialog.asksaveasfilename(
+                title="Sauvegarder la course",
+                defaultextension=".json",
+                initialfile=default_name,
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+            )
+            if not filepath:
+                # L'utilisateur a annulé, utiliser le nom par défaut dans le répertoire courant
+                filepath = default_name
+            self.current_file = filepath
+
         self.race.save(self.current_file)
-        
-        messagebox.showinfo("Succès", f"{self.race.config.num_runs} runs générés!")
+
+        messagebox.showinfo("Succès", f"{self.race.config.num_runs} runs générés!\n\nSauvegardé dans:\n{self.current_file}")
         self._show_race_management()
     
     def _show_race_management(self):
@@ -293,6 +304,22 @@ class MainWindow(tk.Tk):
             text=f"{len(self.race.athletes)} coureurs - {self.race.config.num_runs} runs",
             font=('Arial', 11)
         ).pack()
+
+        # Afficher le chemin du fichier
+        if self.current_file:
+            file_frame = ttk.Frame(header)
+            file_frame.pack(pady=5)
+            ttk.Label(
+                file_frame,
+                text="Fichier:",
+                font=('Arial', 9)
+            ).pack(side=tk.LEFT)
+            ttk.Label(
+                file_frame,
+                text=self.current_file,
+                font=('Arial', 9, 'italic'),
+                foreground='gray'
+            ).pack(side=tk.LEFT, padx=5)
 
         # Bouton gestion des coureurs
         ttk.Button(
