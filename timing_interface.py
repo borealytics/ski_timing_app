@@ -25,7 +25,7 @@ class TimingInterface(tk.Toplevel):
         style.configure('Error.TEntry', fieldbackground='#ffcccc')
 
         self.title(f"Chronometrage - Run {run.number}")
-        self.geometry("950x600")
+        self.geometry("1100x650")
 
         # Empêcher la fermeture sans confirmation
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -75,7 +75,7 @@ class TimingInterface(tk.Toplevel):
         # Treeview pour la liste
         self.athlete_tree = ttk.Treeview(
             list_frame,
-            columns=('order', 'bib', 'name', 'time', 'status'),
+            columns=('order', 'bib', 'name', 'cat', 'sex', 'club', 'time', 'status'),
             show='headings',
             yscrollcommand=scrollbar.set,
             selectmode='browse'
@@ -86,14 +86,20 @@ class TimingInterface(tk.Toplevel):
         self.athlete_tree.heading('order', text='#')
         self.athlete_tree.heading('bib', text='Bib')
         self.athlete_tree.heading('name', text='Nom')
+        self.athlete_tree.heading('cat', text='Cat')
+        self.athlete_tree.heading('sex', text='S')
+        self.athlete_tree.heading('club', text='Club')
         self.athlete_tree.heading('time', text='Temps')
         self.athlete_tree.heading('status', text='')
 
-        self.athlete_tree.column('order', width=35, anchor='center')
-        self.athlete_tree.column('bib', width=45, anchor='center')
-        self.athlete_tree.column('name', width=120)
-        self.athlete_tree.column('time', width=70, anchor='center')
-        self.athlete_tree.column('status', width=30, anchor='center')
+        self.athlete_tree.column('order', width=30, anchor='center')
+        self.athlete_tree.column('bib', width=40, anchor='center')
+        self.athlete_tree.column('name', width=100)
+        self.athlete_tree.column('cat', width=40, anchor='center')
+        self.athlete_tree.column('sex', width=25, anchor='center')
+        self.athlete_tree.column('club', width=70)
+        self.athlete_tree.column('time', width=60, anchor='center')
+        self.athlete_tree.column('status', width=35, anchor='center')
 
         # Tags pour les couleurs
         self.athlete_tree.tag_configure('active', background='#fff3cd', font=('Arial', 10, 'bold'))
@@ -391,6 +397,9 @@ class TimingInterface(tk.Toplevel):
                 i + 1,
                 athlete.bib,
                 athlete.last_name,
+                athlete.category,
+                athlete.sex,
+                athlete.team,
                 time_display,
                 status_icon
             ), tags=(tag,))

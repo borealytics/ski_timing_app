@@ -128,9 +128,9 @@ class RaceConfig:
     calculation_method: str = "BEST_2"  # BEST_1, BEST_2, SUM_3
     
     # Ordres de départ pour chaque run
-    run1_order: List[str] = field(default_factory=lambda: ['category', 'sex', 'bib_asc'])
-    run2_order: List[str] = field(default_factory=lambda: ['category', 'sex', 'start_desc'])
-    run3_order: List[str] = field(default_factory=lambda: ['category', 'sex', 'bib_asc'])
+    run1_order: List[str] = field(default_factory=lambda: ['category', 'bib_asc'])
+    run2_order: List[str] = field(default_factory=lambda: ['category', 'bib_desc'])
+    run3_order: List[str] = field(default_factory=lambda: ['category', 'bib_asc'])
     
     def to_dict(self) -> dict:
         return {
@@ -181,17 +181,25 @@ class Race:
             
             self.runs.append(run)
     
+    def _category_sort_key(self, category: str) -> int:
+        """Extrait le nombre de la catégorie pour le tri (U6->6, U10->10, etc.)"""
+        import re
+        match = re.search(r'\d+', category)
+        if match:
+            return int(match.group())
+        return 999  # Catégories sans nombre à la fin
+
     def _sort_athletes(self, order: List[str]) -> List[Athlete]:
         """Trie les athlètes selon l'ordre spécifié"""
         athletes = self.athletes.copy()
-        
+
         # Clés de tri
         keys = []
         reverse_flags = []
-        
+
         for criterion in order:
             if criterion == 'category':
-                keys.append(lambda a, c=criterion: a.category)
+                keys.append(lambda a, c=criterion: self._category_sort_key(a.category))
                 reverse_flags.append(False)
             elif criterion == 'sex':
                 keys.append(lambda a, c=criterion: a.sex)
