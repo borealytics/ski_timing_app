@@ -11,10 +11,11 @@ from utils import validate_time_input, format_time_msscc
 class TimingInterface(tk.Toplevel):
     """Interface de saisie des temps pour un run"""
 
-    def __init__(self, parent, run: Run, on_complete: Optional[Callable] = None, on_save: Optional[Callable] = None):
+    def __init__(self, parent, run: Run, race=None, on_complete: Optional[Callable] = None, on_save: Optional[Callable] = None):
         super().__init__(parent)
 
         self.run = run
+        self.race = race
         self.on_complete = on_complete
         self.on_save = on_save
         self.current_index = 0
@@ -245,6 +246,28 @@ class TimingInterface(tk.Toplevel):
         )
         self.info_label.pack()
 
+        # Frame pour les indicateurs d'alerte
+        self.alert_frame = ttk.Frame(athlete_frame)
+        self.alert_frame.pack(pady=5)
+
+        # Indicateur dernier/avant-dernier de catégorie
+        self.category_alert_label = ttk.Label(
+            self.alert_frame,
+            text="",
+            font=('Arial', 11, 'bold'),
+            foreground='#856404',
+            background='#fff3cd'
+        )
+
+        # Indicateur coureur lent (pour runs 2+)
+        self.slow_alert_label = ttk.Label(
+            self.alert_frame,
+            text="",
+            font=('Arial', 11, 'bold'),
+            foreground='white',
+            background='#dc3545'
+        )
+
         # Zone de saisie du temps
         time_frame = ttk.LabelFrame(main_frame, text="TEMPS", padding="15")
         time_frame.pack(fill=tk.X, pady=10)
@@ -470,6 +493,91 @@ class TimingInterface(tk.Toplevel):
             self.cent_var.set(filtered)
             self._updating_fields = False
 
+    def _get_category_position(self, athlete) -> tuple:
+        """Retourne (position, total) du coureur dans sa catégorie parmi ceux restants à chronométrer"""
+        category = athlete.category
+
+        # Trouver tous les coureurs de la même catégorie pas encore chronométrés
+        remaining_in_category = []
+        for i, a in enumerate(self.run.athletes):
+            if a.category == category:
+                result = self.run.get_result(a.bib)
+                if result.status == 'PENDING':
+                    remaining_in_category.append((i, a))
+
+        # Trouver la position du coureur actuel parmi les restants
+        position = None
+        for pos, (idx, a) in enumerate(remaining_in_category):
+            if a.bib == athlete.bib:
+                position = pos + 1
+                break
+
+        return position, len(remaining_in_category)
+
+    def _is_slow_runner(self, athlete) -> tuple:
+        """Vérifie si le coureur est plus lent que la moyenne de sa catégorie (runs précédentes)
+        Retourne (is_slow, previous_time, category_avg)"""
+        if not self.race or self.run.number == 1:
+            return False, None, None
+
+        # Récupérer les temps des runs précédentes pour ce coureur
+        athlete_times = []
+        for prev_run in self.race.runs:
+            if prev_run.number >= self.run.number:
+                break
+            result = prev_run.get_result(athlete.bib)
+            if result and result.status == 'FINISHED' and result.time_seconds:
+                athlete_times.append(result.time_seconds)
+
+        if not athlete_times:
+            return False, None, None
+
+        athlete_avg = sum(athlete_times) / len(athlete_times)
+
+        # Calculer la moyenne de la catégorie pour les runs précédentes
+        category_times = []
+        for prev_run in self.race.runs:
+            if prev_run.number >= self.run.number:
+                break
+            for a in prev_run.athletes:
+                if a.category == athlete.category:
+                    result = prev_run.get_result(a.bib)
+                    if result and result.status == 'FINISHED' and result.time_seconds:
+                        category_times.append(result.time_seconds)
+
+        if not category_times:
+            return False, athlete_avg, None
+
+        category_avg = sum(category_times) / len(category_times)
+
+        # Considérer comme lent si > 10% plus lent que la moyenne
+        is_slow = athlete_avg > category_avg * 1.10
+
+        return is_slow, athlete_avg, category_avg
+
+    def _update_alerts(self, athlete):
+        """Met à jour les indicateurs d'alerte pour le coureur actuel"""
+        # Cacher tous les labels d'alerte
+        self.category_alert_label.pack_forget()
+        self.slow_alert_label.pack_forget()
+
+        # Vérifier position dans la catégorie
+        position, total = self._get_category_position(athlete)
+        if position and total:
+            if position == total and total > 0:
+                self.category_alert_label.config(text=f"  DERNIER {athlete.category}  ")
+                self.category_alert_label.pack(side=tk.LEFT, padx=5)
+            elif position == total - 1 and total > 1:
+                self.category_alert_label.config(text=f"  AVANT-DERNIER {athlete.category}  ")
+                self.category_alert_label.pack(side=tk.LEFT, padx=5)
+
+        # Vérifier si coureur lent (runs 2+)
+        is_slow, athlete_time, category_avg = self._is_slow_runner(athlete)
+        if is_slow and athlete_time:
+            from utils import format_time_msscc
+            self.slow_alert_label.config(text=f"  LENT ({format_time_msscc(athlete_time)})  ")
+            self.slow_alert_label.pack(side=tk.LEFT, padx=5)
+
     def _update_athlete_list(self):
         """Met à jour la liste des coureurs"""
         # Sauvegarder la sélection actuelle
@@ -549,6 +657,9 @@ class TimingInterface(tk.Toplevel):
         self.bib_label.config(text=f"Bib: #{athlete.bib}")
         self.name_label.config(text=f"{athlete.last_name} {athlete.first_name}")
         self.info_label.config(text=f"{athlete.category} - {athlete.sex} - {athlete.team}")
+
+        # Mettre à jour les alertes (dernier de catégorie, coureur lent)
+        self._update_alerts(athlete)
 
         # Progression
         completed, total = self.run.get_completion_rate()

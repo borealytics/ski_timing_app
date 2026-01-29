@@ -402,7 +402,7 @@ class MainWindow(tk.Tk):
             if self.current_file:
                 self.race.save(self.current_file)
 
-        TimingInterface(self, run, on_complete=lambda: self._show_race_management(), on_save=on_save)
+        TimingInterface(self, run, race=self.race, on_complete=lambda: self._show_race_management(), on_save=on_save)
 
     def _open_athlete_manager(self):
         """Ouvre la fenêtre de gestion des coureurs"""
