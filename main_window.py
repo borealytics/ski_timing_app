@@ -638,8 +638,8 @@ class MainWindow(tk.Tk):
         
         try:
             calculator = ResultsCalculator(self.race)
-            calculator.export_podiums_to_excel(filepath.replace('.xlsx', ''))
-            messagebox.showinfo("Succès", "Podiums exportés!")
+            calculator.export_podiums_to_excel(filepath)
+            messagebox.showinfo("Succès", f"Podiums exportés!\n{filepath}")
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de l'export:\n{e}")
     

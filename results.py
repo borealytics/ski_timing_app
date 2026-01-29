@@ -187,50 +187,110 @@ class ResultsCalculator:
         
         return filtered[:top_n]
     
-    def export_podiums_to_excel(self, base_filepath: str):
+    def export_podiums_to_excel(self, filepath: str):
         """
-        Exporte les podiums de chaque catégorie-sexe dans des fichiers Excel séparés
-        
+        Exporte tous les podiums dans un seul fichier Excel, un seul onglet
+
         Args:
-            base_filepath: Chemin de base (sans extension)
+            filepath: Chemin du fichier (avec ou sans extension .xlsx)
         """
-        import pandas as pd
+        import re
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
         from pathlib import Path
-        
+
         all_results = self.calculate_final_results()
-        
-        # Obtenir toutes les combinaisons catégorie-sexe
-        categories = set(r['category'] for r in all_results)
-        sexes = set(r['sex'] for r in all_results)
-        
-        base_path = Path(base_filepath)
-        base_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        for category in sorted(categories):
-            for sex in sorted(sexes):
+
+        # Obtenir toutes les combinaisons catégorie-sexe triées
+        categories = sorted(set(r['category'] for r in all_results),
+                          key=lambda c: int(re.search(r'\d+', c).group()) if re.search(r'\d+', c) else 999)
+        sexes = sorted(set(r['sex'] for r in all_results))
+
+        # Créer le workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Podiums"
+
+        # Styles
+        title_font = Font(bold=True, size=16)
+        header_font = Font(bold=True, size=11)
+        category_font = Font(bold=True, size=12)
+        header_fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        row = 1
+
+        # Titre de la course
+        ws.cell(row=row, column=1, value=self.race.config.race_name)
+        ws.cell(row=row, column=1).font = title_font
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+        row += 2
+
+        # Colonnes
+        columns = ['Rang', 'Bib', 'Prénom', 'Nom', 'Club', 'Temps']
+
+        for category in categories:
+            for sex in sexes:
                 podium = self.get_podium_by_category(category, sex, top_n=5)
-                
+
                 if not podium:
                     continue
-                
-                # Préparer les données pour Excel
-                data = []
+
+                # Titre de la catégorie
+                sex_label = "Filles" if sex == "F" else "Garçons"
+                ws.cell(row=row, column=1, value=f"{category} - {sex_label}")
+                ws.cell(row=row, column=1).font = category_font
+                ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=6)
+                row += 1
+
+                # En-têtes
+                for col_idx, col_name in enumerate(columns, 1):
+                    cell = ws.cell(row=row, column=col_idx, value=col_name)
+                    cell.font = header_font
+                    cell.fill = header_fill
+                    cell.border = thin_border
+                    cell.alignment = Alignment(horizontal='center')
+                row += 1
+
+                # Données du podium
                 for result in podium:
                     athlete = next(a for a in self.race.athletes if a.bib == result['bib'])
-                    data.append({
-                        'Rang': result['rank'],
-                        'Bib': result['bib'],
-                        'Nom': athlete.last_name,
-                        'Prénom': athlete.first_name,
-                        'Club': athlete.team,
-                        'Temps Total': result['total_display']
-                    })
-                
-                df = pd.DataFrame(data)
-                
-                # Nom du fichier
-                filename = base_path.parent / f"{base_path.stem}_{category}_{sex}.xlsx"
-                
-                # Export
-                df.to_excel(filename, index=False, sheet_name=f"{category}-{sex}")
-                print(f"Exporté: {filename}")
+                    values = [
+                        result['rank'],
+                        result['bib'],
+                        athlete.first_name,
+                        athlete.last_name,
+                        athlete.team,
+                        result['total_display']
+                    ]
+                    for col_idx, value in enumerate(values, 1):
+                        cell = ws.cell(row=row, column=col_idx, value=value)
+                        cell.border = thin_border
+                        if col_idx in [1, 2, 6]:  # Rang, Bib, Temps centrés
+                            cell.alignment = Alignment(horizontal='center')
+                    row += 1
+
+                # Ligne vide entre les catégories
+                row += 1
+
+        # Ajuster les largeurs de colonnes
+        ws.column_dimensions['A'].width = 8   # Rang
+        ws.column_dimensions['B'].width = 8   # Bib
+        ws.column_dimensions['C'].width = 15  # Prénom
+        ws.column_dimensions['D'].width = 15  # Nom
+        ws.column_dimensions['E'].width = 20  # Club
+        ws.column_dimensions['F'].width = 12  # Temps
+
+        # S'assurer que le fichier a l'extension .xlsx
+        filepath = str(filepath)
+        if not filepath.endswith('.xlsx'):
+            filepath += '.xlsx'
+
+        # Sauvegarder
+        wb.save(filepath)
+        print(f"Exporté: {filepath}")
