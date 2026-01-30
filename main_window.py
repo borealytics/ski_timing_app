@@ -164,27 +164,20 @@ class MainWindow(tk.Tk):
         
         ttk.Label(
             frame,
-            text="Choisissez le type de fichier à importer:",
+            text="Importez le fichier CSV des coureurs:",
             font=('Arial', 11)
         ).pack(pady=10)
 
-        # Frame pour les boutons d'import
+        # Frame pour le bouton d'import
         import_frame = ttk.Frame(frame)
         import_frame.pack(pady=20)
 
         ttk.Button(
             import_frame,
-            text="Fichier de course (;)",
-            command=lambda: self._import_athletes('course_file'),
+            text="Importer fichier CSV...",
+            command=self._import_athletes,
             width=25
-        ).pack(side=tk.LEFT, padx=5)
-
-        ttk.Button(
-            import_frame,
-            text="National/FIS (,)",
-            command=lambda: self._import_athletes('national_fis'),
-            width=25
-        ).pack(side=tk.LEFT, padx=5)
+        ).pack()
 
         # Label pour le statut
         self.import_label = ttk.Label(frame, text="Aucun fichier sélectionné")
@@ -194,8 +187,8 @@ class MainWindow(tk.Tk):
         self.next_frame = ttk.Frame(frame)
         self.next_frame.pack(pady=30)
     
-    def _import_athletes(self, format_type: str):
-        """Import des athlètes depuis CSV selon le format choisi"""
+    def _import_athletes(self):
+        """Import des athlètes depuis CSV avec auto-détection du format"""
         filepath = filedialog.askopenfilename(
             title="Importer les coureurs",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
@@ -203,7 +196,8 @@ class MainWindow(tk.Tk):
 
         if filepath:
             try:
-                athletes = CSVImporter.import_athletes_by_format(filepath, format_type)
+                # Utiliser l'import avec auto-détection
+                athletes = CSVImporter.import_athletes_course_file(filepath)
 
                 if not athletes:
                     messagebox.showwarning("Attention", "Aucun coureur trouvé dans le fichier")
@@ -212,13 +206,7 @@ class MainWindow(tk.Tk):
                 # Ajouter les athlètes à la course
                 self.race.athletes = athletes
 
-                format_labels = {
-                    'course_file': 'Fichier de course',
-                    'national_fis': 'National/FIS',
-                    'standard': 'Standard'
-                }
-                format_label = format_labels.get(format_type, format_type)
-                self.import_label.config(text=f"{len(athletes)} coureurs importés ({format_label})")
+                self.import_label.config(text=f"{len(athletes)} coureurs importés")
 
                 # Afficher le bouton suivant (s'il n'existe pas déjà)
                 for widget in self.next_frame.winfo_children():
