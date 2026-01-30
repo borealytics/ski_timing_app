@@ -1,0 +1,44 @@
+name: Build Windows Executable
+
+on:
+  # Se déclenche quand on crée une Release
+  release:
+    types: [created]
+  # Permet aussi de lancer manuellement depuis GitHub
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas openpyxl pyinstaller
+
+    - name: Build executable
+      run: |
+        pyinstaller --onefile --windowed --name "SkiTiming" main.py
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: SkiTiming-Windows
+        path: dist/SkiTiming.exe
+
+    - name: Upload to Release
+      if: github.event_name == 'release'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/SkiTiming.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
