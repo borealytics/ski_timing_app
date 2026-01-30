@@ -126,18 +126,41 @@ class CSVImporter:
 
         first_line = lines[0].strip()
 
-        # Auto-détecter le séparateur si non spécifié
-        if separator is None:
-            separator = CSVImporter._detect_separator(first_line)
+        # Vérifier si les lignes sont entourées de guillemets (fichier mal formaté)
+        if first_line.startswith('"') and first_line.endswith('"'):
+            # Supprimer les guillemets de chaque ligne
+            lines = [line.strip().strip('"') for line in lines]
+            first_line = lines[0]
 
-        # Si la première ligne commence par #, c'est l'en-tête avec commentaire
-        if first_line.startswith('#'):
-            # Nettoyer l'en-tête: "# SQA;BIB;..." -> "SQA,BIB,..."
-            header = first_line.lstrip('# ').split(separator)
-            header = [h.strip() for h in header]
-            df = pd.read_csv(filepath, skiprows=1, names=header, sep=separator, encoding=encoding)
+            # Réécrire le contenu nettoyé dans un StringIO pour pandas
+            from io import StringIO
+            clean_content = '\n'.join(lines)
+
+            # Auto-détecter le séparateur
+            if separator is None:
+                separator = CSVImporter._detect_separator(first_line)
+
+            # Si la première ligne commence par #, c'est l'en-tête avec commentaire
+            if first_line.startswith('#'):
+                header = first_line.lstrip('# ').split(separator)
+                header = [h.strip() for h in header]
+                df = pd.read_csv(StringIO('\n'.join(lines[1:])), names=header, sep=separator)
+            else:
+                df = pd.read_csv(StringIO(clean_content), sep=separator)
         else:
-            df = pd.read_csv(filepath, sep=separator, encoding=encoding)
+            # Fichier normal
+            # Auto-détecter le séparateur si non spécifié
+            if separator is None:
+                separator = CSVImporter._detect_separator(first_line)
+
+            # Si la première ligne commence par #, c'est l'en-tête avec commentaire
+            if first_line.startswith('#'):
+                # Nettoyer l'en-tête: "# SQA;BIB;..." -> "SQA,BIB,..."
+                header = first_line.lstrip('# ').split(separator)
+                header = [h.strip() for h in header]
+                df = pd.read_csv(filepath, skiprows=1, names=header, sep=separator, encoding=encoding)
+            else:
+                df = pd.read_csv(filepath, sep=separator, encoding=encoding)
 
         # Nettoyage spécifique au format FIS (pas d'appel à clean_dataframe)
         # Supprimer les lignes sans BIB
