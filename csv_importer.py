@@ -46,8 +46,9 @@ class CSVImporter:
     @staticmethod
     def import_athletes_course_file(filepath: str) -> List[Athlete]:
         """
-        Importe les athlètes depuis un fichier de course (séparateur ;)
+        Importe les athlètes depuis un fichier de course
         Format: # SQA;BIB;StNb;Nom;Prenom;Annee;Club;Sexe;Categorie
+        Auto-détecte le séparateur (; ou ,)
 
         Args:
             filepath: Chemin vers le fichier CSV
@@ -55,13 +56,15 @@ class CSVImporter:
         Returns:
             Liste d'athlètes
         """
-        return CSVImporter._import_athletes_fis_format(filepath, separator=';')
+        # Auto-détection du séparateur
+        return CSVImporter._import_athletes_fis_format(filepath, separator=None)
 
     @staticmethod
     def import_athletes_national_fis(filepath: str) -> List[Athlete]:
         """
-        Importe les athlètes depuis un CSV format National/FIS (séparateur ,)
+        Importe les athlètes depuis un CSV format National/FIS
         Format: # SQA,BIB,StNb,Nom,Prenom,Annee,Club,Sexe,Categorie
+        Auto-détecte le séparateur (; ou ,)
 
         Args:
             filepath: Chemin vers le fichier CSV
@@ -69,32 +72,72 @@ class CSVImporter:
         Returns:
             Liste d'athlètes
         """
-        return CSVImporter._import_athletes_fis_format(filepath, separator=',')
+        # Auto-détection du séparateur
+        return CSVImporter._import_athletes_fis_format(filepath, separator=None)
 
     @staticmethod
-    def _import_athletes_fis_format(filepath: str, separator: str = ',') -> List[Athlete]:
+    def _read_file_with_encoding(filepath: str):
+        """Lit un fichier en essayant plusieurs encodages"""
+        encodings = ['utf-8', 'utf-8-sig', 'latin-1', 'cp1252', 'iso-8859-1']
+        for encoding in encodings:
+            try:
+                with open(filepath, 'r', encoding=encoding) as f:
+                    content = f.read()
+                    # Vérifier que le contenu est lisible
+                    if content and len(content) > 0:
+                        return content, encoding
+            except (UnicodeDecodeError, UnicodeError):
+                continue
+        # Fallback: lire en binaire et décoder
+        with open(filepath, 'rb') as f:
+            content = f.read().decode('utf-8', errors='replace')
+        return content, 'utf-8'
+
+    @staticmethod
+    def _detect_separator(first_line: str) -> str:
+        """Détecte le séparateur utilisé dans la ligne"""
+        # Compter les occurrences
+        semicolons = first_line.count(';')
+        commas = first_line.count(',')
+
+        # Le séparateur le plus fréquent gagne
+        if semicolons > commas:
+            return ';'
+        return ','
+
+    @staticmethod
+    def _import_athletes_fis_format(filepath: str, separator: str = None) -> List[Athlete]:
         """
         Importe les athlètes depuis un CSV format FIS (National/FIS ou fichier de course)
 
         Args:
             filepath: Chemin vers le fichier CSV
-            separator: Séparateur (virgule ou point-virgule)
+            separator: Séparateur (virgule ou point-virgule) - auto-détecté si None
 
         Returns:
             Liste d'athlètes
         """
-        # Lire le fichier - la première ligne peut avoir un commentaire
-        with open(filepath, 'r', encoding='utf-8') as f:
-            first_line = f.readline().strip()
+        # Lire le fichier avec le bon encodage
+        content, encoding = CSVImporter._read_file_with_encoding(filepath)
+        lines = content.strip().split('\n')
+
+        if not lines:
+            return []
+
+        first_line = lines[0].strip()
+
+        # Auto-détecter le séparateur si non spécifié
+        if separator is None:
+            separator = CSVImporter._detect_separator(first_line)
 
         # Si la première ligne commence par #, c'est l'en-tête avec commentaire
         if first_line.startswith('#'):
             # Nettoyer l'en-tête: "# SQA;BIB;..." -> "SQA,BIB,..."
             header = first_line.lstrip('# ').split(separator)
             header = [h.strip() for h in header]
-            df = pd.read_csv(filepath, skiprows=1, names=header, sep=separator)
+            df = pd.read_csv(filepath, skiprows=1, names=header, sep=separator, encoding=encoding)
         else:
-            df = pd.read_csv(filepath, sep=separator)
+            df = pd.read_csv(filepath, sep=separator, encoding=encoding)
 
         # Nettoyage spécifique au format FIS (pas d'appel à clean_dataframe)
         # Supprimer les lignes sans BIB
