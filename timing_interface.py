@@ -494,25 +494,29 @@ class TimingInterface(tk.Toplevel):
             self._updating_fields = False
 
     def _get_category_position(self, athlete) -> tuple:
-        """Retourne (position, total) du coureur dans sa catégorie parmi ceux restants à chronométrer"""
+        """Retourne (position, total, label) du coureur dans sa catégorie+sexe parmi ceux restants"""
         category = athlete.category
+        sex = athlete.sex
 
-        # Trouver tous les coureurs de la même catégorie pas encore chronométrés
-        remaining_in_category = []
+        # Trouver tous les coureurs de la même catégorie ET sexe pas encore chronométrés
+        remaining = []
         for i, a in enumerate(self.run.athletes):
-            if a.category == category:
+            if a.category == category and a.sex == sex:
                 result = self.run.get_result(a.bib)
                 if result.status == 'PENDING':
-                    remaining_in_category.append((i, a))
+                    remaining.append((i, a))
 
         # Trouver la position du coureur actuel parmi les restants
         position = None
-        for pos, (idx, a) in enumerate(remaining_in_category):
+        for pos, (idx, a) in enumerate(remaining):
             if a.bib == athlete.bib:
                 position = pos + 1
                 break
 
-        return position, len(remaining_in_category)
+        # Label pour l'affichage (ex: "U10 F" ou "U10 M")
+        label = f"{category} {sex}"
+
+        return position, len(remaining), label
 
     def _is_slow_runner(self, athlete) -> tuple:
         """Vérifie si le coureur est plus lent que la moyenne de sa catégorie (runs précédentes)
@@ -561,14 +565,14 @@ class TimingInterface(tk.Toplevel):
         self.category_alert_label.pack_forget()
         self.slow_alert_label.pack_forget()
 
-        # Vérifier position dans la catégorie
-        position, total = self._get_category_position(athlete)
+        # Vérifier position dans la catégorie+sexe
+        position, total, label = self._get_category_position(athlete)
         if position and total:
             if position == total and total > 0:
-                self.category_alert_label.config(text=f"  DERNIER {athlete.category}  ")
+                self.category_alert_label.config(text=f"  DERNIER {label}  ")
                 self.category_alert_label.pack(side=tk.LEFT, padx=5)
             elif position == total - 1 and total > 1:
-                self.category_alert_label.config(text=f"  AVANT-DERNIER {athlete.category}  ")
+                self.category_alert_label.config(text=f"  AVANT-DERNIER {label}  ")
                 self.category_alert_label.pack(side=tk.LEFT, padx=5)
 
         # Vérifier si coureur lent (runs 2+)

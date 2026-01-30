@@ -9,7 +9,189 @@ from utils import parse_time_msscc, clean_dataframe
 
 class CSVImporter:
     """Gestion de l'import/export CSV"""
-    
+
+    @staticmethod
+    def detect_csv_format(filepath: str) -> str:
+        """
+        Détecte le format du fichier CSV
+
+        Returns:
+            'course_file' (fichier de course, séparateur ;)
+            'national_fis' (format National/FIS, séparateur ,)
+            'standard' (format standard)
+        """
+        with open(filepath, 'r', encoding='utf-8') as f:
+            first_line = f.readline().strip()
+
+        # Détecter le séparateur
+        if ';' in first_line:
+            # Fichier de course avec séparateur point-virgule
+            return 'course_file'
+
+        # Vérifier si c'est un format National/FIS (avec virgule)
+        if first_line.startswith('# ') and 'SQA' in first_line:
+            return 'national_fis'
+
+        # Essayer de lire avec virgule
+        try:
+            df = pd.read_csv(filepath, nrows=1)
+            columns = [col.strip() for col in df.columns]
+            if 'BIB' in columns or 'Nom' in columns or 'Prenom' in columns or 'StNb' in columns:
+                return 'national_fis'
+        except:
+            pass
+
+        return 'standard'
+
+    @staticmethod
+    def import_athletes_course_file(filepath: str) -> List[Athlete]:
+        """
+        Importe les athlètes depuis un fichier de course (séparateur ;)
+        Format: # SQA;BIB;StNb;Nom;Prenom;Annee;Club;Sexe;Categorie
+
+        Args:
+            filepath: Chemin vers le fichier CSV
+
+        Returns:
+            Liste d'athlètes
+        """
+        return CSVImporter._import_athletes_fis_format(filepath, separator=';')
+
+    @staticmethod
+    def import_athletes_national_fis(filepath: str) -> List[Athlete]:
+        """
+        Importe les athlètes depuis un CSV format National/FIS (séparateur ,)
+        Format: # SQA,BIB,StNb,Nom,Prenom,Annee,Club,Sexe,Categorie
+
+        Args:
+            filepath: Chemin vers le fichier CSV
+
+        Returns:
+            Liste d'athlètes
+        """
+        return CSVImporter._import_athletes_fis_format(filepath, separator=',')
+
+    @staticmethod
+    def _import_athletes_fis_format(filepath: str, separator: str = ',') -> List[Athlete]:
+        """
+        Importe les athlètes depuis un CSV format FIS (National/FIS ou fichier de course)
+
+        Args:
+            filepath: Chemin vers le fichier CSV
+            separator: Séparateur (virgule ou point-virgule)
+
+        Returns:
+            Liste d'athlètes
+        """
+        # Lire le fichier - la première ligne peut avoir un commentaire
+        with open(filepath, 'r', encoding='utf-8') as f:
+            first_line = f.readline().strip()
+
+        # Si la première ligne commence par #, c'est l'en-tête avec commentaire
+        if first_line.startswith('#'):
+            # Nettoyer l'en-tête: "# SQA;BIB;..." -> "SQA,BIB,..."
+            header = first_line.lstrip('# ').split(separator)
+            header = [h.strip() for h in header]
+            df = pd.read_csv(filepath, skiprows=1, names=header, sep=separator)
+        else:
+            df = pd.read_csv(filepath, sep=separator)
+
+        # Nettoyage spécifique au format FIS (pas d'appel à clean_dataframe)
+        # Supprimer les lignes sans BIB
+        bib_col = 'BIB' if 'BIB' in df.columns else 'Bib' if 'Bib' in df.columns else None
+        if bib_col:
+            df = df[df[bib_col].notna()].copy()
+
+        athletes = []
+
+        # Mapper les colonnes (avec variantes possibles)
+        col_mapping = {
+            'bib': ['BIB', 'Bib', 'bib'],
+            'start_number': ['StNb', 'Start Number', 'StartNb'],
+            'last_name': ['Nom', 'Last', 'LastName'],
+            'first_name': ['Prenom', 'First', 'FirstName'],
+            'year_of_birth': ['Annee', 'Year of Birth', 'YearOfBirth', 'Year'],
+            'team': ['Club', 'Team'],
+            'sex': ['Sexe', 'Sex', 'Sex (Masters or XC)'],
+            'category': ['Categorie', 'Class', 'Category'],
+            'nat_number': ['SQA', '# SQA', 'NAT Number', 'NatNumber']
+        }
+
+        def get_col(df, possible_names):
+            for name in possible_names:
+                if name in df.columns:
+                    return name
+            return None
+
+        for _, row in df.iterrows():
+            try:
+                bib_col = get_col(df, col_mapping['bib'])
+                stnb_col = get_col(df, col_mapping['start_number'])
+                nom_col = get_col(df, col_mapping['last_name'])
+                prenom_col = get_col(df, col_mapping['first_name'])
+                annee_col = get_col(df, col_mapping['year_of_birth'])
+                club_col = get_col(df, col_mapping['team'])
+                sexe_col = get_col(df, col_mapping['sex'])
+                cat_col = get_col(df, col_mapping['category'])
+                nat_col = get_col(df, col_mapping['nat_number'])
+
+                athlete = Athlete(
+                    bib=int(row[bib_col]) if bib_col and pd.notna(row[bib_col]) else 0,
+                    start_number=int(row[stnb_col]) if stnb_col and pd.notna(row[stnb_col]) else 0,
+                    first_name=str(row[prenom_col]).strip() if prenom_col and pd.notna(row[prenom_col]) else '',
+                    last_name=str(row[nom_col]).strip() if nom_col and pd.notna(row[nom_col]) else '',
+                    category=str(row[cat_col]).strip() if cat_col and pd.notna(row[cat_col]) else '',
+                    sex=str(row[sexe_col]).strip() if sexe_col and pd.notna(row[sexe_col]) else '',
+                    team=str(row[club_col]).strip() if club_col and pd.notna(row[club_col]) else '',
+                    year_of_birth=int(row[annee_col]) if annee_col and pd.notna(row[annee_col]) else 0,
+                    nat_number=str(row[nat_col]) if nat_col and pd.notna(row[nat_col]) else ''
+                )
+                athletes.append(athlete)
+            except Exception as e:
+                print(f"Erreur lors de l'import de la ligne: {e}")
+                continue
+
+        return athletes
+
+    @staticmethod
+    def import_athletes_auto(filepath: str) -> List[Athlete]:
+        """
+        Importe les athlètes en détectant automatiquement le format
+
+        Args:
+            filepath: Chemin vers le fichier CSV
+
+        Returns:
+            Liste d'athlètes
+        """
+        format_type = CSVImporter.detect_csv_format(filepath)
+
+        if format_type == 'course_file':
+            return CSVImporter.import_athletes_course_file(filepath)
+        elif format_type == 'national_fis':
+            return CSVImporter.import_athletes_national_fis(filepath)
+        else:
+            return CSVImporter.import_athletes(filepath)
+
+    @staticmethod
+    def import_athletes_by_format(filepath: str, format_type: str) -> List[Athlete]:
+        """
+        Importe les athlètes selon le format spécifié
+
+        Args:
+            filepath: Chemin vers le fichier CSV
+            format_type: 'course_file', 'national_fis' ou 'standard'
+
+        Returns:
+            Liste d'athlètes
+        """
+        if format_type == 'course_file':
+            return CSVImporter.import_athletes_course_file(filepath)
+        elif format_type == 'national_fis':
+            return CSVImporter.import_athletes_national_fis(filepath)
+        else:
+            return CSVImporter.import_athletes(filepath)
+
     @staticmethod
     def import_athletes(filepath: str) -> List[Athlete]:
         """
@@ -47,53 +229,120 @@ class CSVImporter:
         return athletes
     
     @staticmethod
-    def import_run_results(filepath: str, run_number: int) -> dict:
+    def get_available_result_columns(filepath: str) -> List[str]:
         """
-        Importe les résultats d'un run depuis un CSV National/FIS
-        
+        Détecte les colonnes de résultats disponibles dans un fichier CSV
+
         Args:
             filepath: Chemin vers le fichier CSV
-            run_number: Numéro du run (1, 2, 3)
-            
+
+        Returns:
+            Liste des colonnes de résultats trouvées
+        """
+        # Détecter le séparateur
+        with open(filepath, 'r', encoding='utf-8') as f:
+            first_line = f.readline().strip()
+
+        separator = ';' if ';' in first_line else ','
+
+        if first_line.startswith('#'):
+            header = first_line.lstrip('# ').split(separator)
+            header = [h.strip() for h in header]
+            df = pd.read_csv(filepath, skiprows=1, names=header, sep=separator, nrows=0)
+        else:
+            df = pd.read_csv(filepath, sep=separator, nrows=0)
+
+        # Chercher les colonnes de résultats possibles
+        result_columns = []
+        possible_names = ['First Run Result', 'Second Run Result', 'Third Run Result',
+                         'Run 1', 'Run 2', 'Run 3', 'Time', 'Temps']
+
+        for col in df.columns:
+            col_clean = col.strip()
+            col_upper = col_clean.upper()
+
+            # Exclure les colonnes de rang
+            if 'RANK' in col_upper or 'RANG' in col_upper:
+                continue
+
+            if col_clean in possible_names or 'Run Result' in col_clean:
+                result_columns.append(col_clean)
+
+        return result_columns
+
+    @staticmethod
+    def import_run_results(filepath: str, run_number: int, result_column: str = None) -> dict:
+        """
+        Importe les résultats d'un run depuis un CSV National/FIS
+
+        Args:
+            filepath: Chemin vers le fichier CSV
+            run_number: Numéro du run (1, 2, 3) - utilisé si result_column non spécifié
+            result_column: Nom de la colonne de résultat à utiliser (optionnel)
+
         Returns:
             Dictionnaire {bib: RunResult}
         """
-        df = pd.read_csv(filepath)
-        df = clean_dataframe(df)
-        
+        # Détecter le séparateur
+        with open(filepath, 'r', encoding='utf-8') as f:
+            first_line = f.readline().strip()
+
+        separator = ';' if ';' in first_line else ','
+
+        if first_line.startswith('#'):
+            header = first_line.lstrip('# ').split(separator)
+            header = [h.strip() for h in header]
+            df = pd.read_csv(filepath, skiprows=1, names=header, sep=separator)
+        else:
+            df = pd.read_csv(filepath, sep=separator)
+
+        # Nettoyage - trouver la colonne Bib
+        bib_col = None
+        for col in df.columns:
+            if col.strip().upper() == 'BIB':
+                bib_col = col
+                break
+
+        if bib_col:
+            df = df[df[bib_col].notna()].copy()
+
         # Déterminer la colonne de résultat
-        if run_number == 1:
+        if result_column:
+            result_col = result_column
+        elif run_number == 1:
             result_col = 'First Run Result'
         elif run_number == 2:
             result_col = 'Second Run Result'
         else:
-            # Pour run 3, pas de colonne native dans le format
-            # On suppose qu'il y a une colonne custom ou on retourne vide
             return {}
-        
+
+        if result_col not in df.columns:
+            raise ValueError(f"Colonne '{result_col}' non trouvée dans le fichier")
+
         results = {}
-        
+
         for _, row in df.iterrows():
             try:
-                bib = int(row['Bib'])
+                bib = int(row[bib_col]) if bib_col else int(row['Bib'])
                 time_str = str(row[result_col]).strip()
-                
+
                 result = RunResult(bib=bib)
-                
+
                 # Parser le temps
-                if time_str.upper() in ['DNS', 'DNF', 'DSQ']:
-                    result.set_status(time_str.upper())
+                if time_str.upper() in ['DNS', 'DNF', 'DSQ', 'NAN', '']:
+                    if time_str.upper() in ['DNS', 'DNF', 'DSQ']:
+                        result.set_status(time_str.upper())
                 else:
                     time_seconds = parse_time_msscc(time_str)
                     if time_seconds is not None:
                         result.set_time(time_seconds, time_str)
-                
+
                 results[bib] = result
-                
+
             except Exception as e:
-                print(f"Erreur lors de l'import du résultat pour bib {row['Bib']}: {e}")
+                print(f"Erreur lors de l'import du résultat: {e}")
                 continue
-        
+
         return results
     
     @staticmethod

@@ -164,54 +164,72 @@ class MainWindow(tk.Tk):
         
         ttk.Label(
             frame,
-            text="Importez le fichier CSV exporté de National/FIS Software",
+            text="Choisissez le type de fichier à importer:",
             font=('Arial', 11)
         ).pack(pady=10)
-        
-        # Frame pour le bouton et le label
+
+        # Frame pour les boutons d'import
         import_frame = ttk.Frame(frame)
         import_frame.pack(pady=20)
-        
-        self.import_label = ttk.Label(import_frame, text="Aucun fichier sélectionné")
-        self.import_label.pack(side=tk.LEFT, padx=10)
-        
+
         ttk.Button(
             import_frame,
-            text="Parcourir...",
-            command=self._import_athletes
-        ).pack(side=tk.LEFT)
+            text="Fichier de course (;)",
+            command=lambda: self._import_athletes('course_file'),
+            width=25
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            import_frame,
+            text="National/FIS (,)",
+            command=lambda: self._import_athletes('national_fis'),
+            width=25
+        ).pack(side=tk.LEFT, padx=5)
+
+        # Label pour le statut
+        self.import_label = ttk.Label(frame, text="Aucun fichier sélectionné")
+        self.import_label.pack(pady=10)
         
         # Frame pour la suite
         self.next_frame = ttk.Frame(frame)
         self.next_frame.pack(pady=30)
     
-    def _import_athletes(self):
-        """Import des athlètes depuis CSV"""
+    def _import_athletes(self, format_type: str):
+        """Import des athlètes depuis CSV selon le format choisi"""
         filepath = filedialog.askopenfilename(
             title="Importer les coureurs",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
         )
-        
+
         if filepath:
             try:
-                athletes = CSVImporter.import_athletes(filepath)
-                
+                athletes = CSVImporter.import_athletes_by_format(filepath, format_type)
+
                 if not athletes:
                     messagebox.showwarning("Attention", "Aucun coureur trouvé dans le fichier")
                     return
-                
+
                 # Ajouter les athlètes à la course
                 self.race.athletes = athletes
-                
-                self.import_label.config(text=f"{len(athletes)} coureurs importés")
-                
-                # Afficher le bouton suivant
+
+                format_labels = {
+                    'course_file': 'Fichier de course',
+                    'national_fis': 'National/FIS',
+                    'standard': 'Standard'
+                }
+                format_label = format_labels.get(format_type, format_type)
+                self.import_label.config(text=f"{len(athletes)} coureurs importés ({format_label})")
+
+                # Afficher le bouton suivant (s'il n'existe pas déjà)
+                for widget in self.next_frame.winfo_children():
+                    widget.destroy()
+
                 ttk.Button(
                     self.next_frame,
                     text="Suivant: Configuration →",
                     command=self._show_config_screen
                 ).pack()
-                
+
             except Exception as e:
                 messagebox.showerror("Erreur", f"Erreur lors de l'import:\n{e}")
     
@@ -394,6 +412,12 @@ class MainWindow(tk.Tk):
             text="Exporter podiums (Excel)",
             command=self._export_podiums
         ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Button(
+            results_frame,
+            text="Exporter résultats complets (Excel)",
+            command=self._export_full_results
+        ).pack(side=tk.LEFT, padx=5)
     
     def _open_timing(self, run):
         """Ouvre l'interface de chronométrage"""
@@ -419,23 +443,87 @@ class MainWindow(tk.Tk):
             title=f"Importer résultats Run {run.number}",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")]
         )
-        
+
         if not filepath:
             return
-        
+
+        # Demander quelle colonne utiliser
+        selected_column = self._ask_result_column(run.number)
+        if not selected_column:
+            return
+
         try:
-            imported_results = CSVImporter.import_run_results(filepath, run.number)
-            
+            imported_results = CSVImporter.import_run_results(filepath, run.number, selected_column)
+
             # Comparer avec les résultats manuels
             differences = CSVImporter.compare_results(run.results, imported_results)
-            
+
             if differences:
                 self._show_differences(differences, run, imported_results)
             else:
-                messagebox.showinfo("Validation", "Aucune différence trouvée! 🎉")
-        
+                messagebox.showinfo("Validation", "Aucune différence trouvée!")
+
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de l'import:\n{e}")
+
+    def _ask_result_column(self, run_number: int) -> str:
+        """Affiche un dialogue pour choisir la colonne de résultat"""
+        dialog = tk.Toplevel(self)
+        dialog.title("Choisir la colonne")
+        dialog.geometry("350x220")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.resizable(False, False)
+        dialog.configure(bg='#f0f0f0')
+
+        # Centrer
+        dialog.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 350) // 2
+        y = self.winfo_y() + (self.winfo_height() - 220) // 2
+        dialog.geometry(f"350x220+{x}+{y}")
+
+        result = {'column': None}
+
+        # Frame principal avec fond
+        frame = ttk.Frame(dialog)
+        frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        # Label en haut
+        ttk.Label(
+            frame,
+            text=f"Quelle colonne utiliser pour\nvalider le Run {run_number}?",
+            font=('Arial', 12),
+            justify=tk.CENTER
+        ).pack(pady=(0, 20))
+
+        # Variable pour stocker la sélection
+        selected = tk.StringVar(value='First Run Result')
+
+        # 2 choix fixes
+        ttk.Radiobutton(
+            frame, text="First Run Result", value='First Run Result', variable=selected
+        ).pack(anchor=tk.W, padx=30, pady=5)
+
+        ttk.Radiobutton(
+            frame, text="Second Run Result", value='Second Run Result', variable=selected
+        ).pack(anchor=tk.W, padx=30, pady=5)
+
+        def on_ok():
+            result['column'] = selected.get()
+            dialog.destroy()
+
+        def on_cancel():
+            dialog.destroy()
+
+        # Boutons en bas
+        btn_frame = ttk.Frame(frame)
+        btn_frame.pack(pady=20)
+
+        ttk.Button(btn_frame, text="OK", command=on_ok, width=12).pack(side=tk.LEFT, padx=10)
+        ttk.Button(btn_frame, text="Annuler", command=on_cancel, width=12).pack(side=tk.LEFT, padx=10)
+
+        dialog.wait_window()
+        return result['column']
     
     def _show_differences(self, differences, run, imported_results):
         """Affiche les différences trouvées"""
@@ -642,7 +730,25 @@ class MainWindow(tk.Tk):
             messagebox.showinfo("Succès", f"Podiums exportés!\n{filepath}")
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de l'export:\n{e}")
-    
+
+    def _export_full_results(self):
+        """Exporte tous les résultats vers Excel"""
+        filepath = filedialog.asksaveasfilename(
+            title="Exporter les résultats complets",
+            defaultextension=".xlsx",
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+        )
+
+        if not filepath:
+            return
+
+        try:
+            calculator = ResultsCalculator(self.race)
+            calculator.export_full_results_to_excel(filepath)
+            messagebox.showinfo("Succès", f"Résultats exportés!\n{filepath}")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de l'export:\n{e}")
+
     def _show_about(self):
         """Affiche la boîte À propos"""
         messagebox.showinfo(

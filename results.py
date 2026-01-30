@@ -294,3 +294,137 @@ class ResultsCalculator:
         # Sauvegarder
         wb.save(filepath)
         print(f"Exporté: {filepath}")
+
+    def export_full_results_to_excel(self, filepath: str):
+        """
+        Exporte tous les résultats complets dans un fichier Excel
+
+        Args:
+            filepath: Chemin du fichier (avec ou sans extension .xlsx)
+        """
+        import re
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+
+        all_results = self.calculate_final_results()
+
+        # Obtenir toutes les combinaisons catégorie-sexe triées
+        categories = sorted(set(r['category'] for r in all_results),
+                          key=lambda c: int(re.search(r'\d+', c).group()) if re.search(r'\d+', c) else 999)
+        sexes = sorted(set(r['sex'] for r in all_results))
+
+        # Créer le workbook
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Résultats complets"
+
+        # Styles
+        title_font = Font(bold=True, size=16)
+        header_font = Font(bold=True, size=11)
+        category_font = Font(bold=True, size=12)
+        header_fill = PatternFill(start_color="DDDDDD", end_color="DDDDDD", fill_type="solid")
+        dnf_fill = PatternFill(start_color="FFCCCC", end_color="FFCCCC", fill_type="solid")
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+
+        row = 1
+
+        # Titre de la course
+        ws.cell(row=row, column=1, value=self.race.config.race_name)
+        ws.cell(row=row, column=1).font = title_font
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=10)
+        row += 2
+
+        # Colonnes de base
+        base_columns = ['Rang', 'Bib', 'Prénom', 'Nom', 'Club']
+
+        # Ajouter les colonnes de runs selon le nombre configuré
+        run_columns = []
+        for i in range(1, self.race.config.num_runs + 1):
+            run_columns.append(f'Run {i}')
+
+        columns = base_columns + run_columns + ['Total', 'Status']
+
+        for category in categories:
+            for sex in sexes:
+                # Filtrer les résultats pour cette catégorie/sexe
+                cat_results = [r for r in all_results
+                              if r['category'] == category and r['sex'] == sex]
+
+                if not cat_results:
+                    continue
+
+                # Titre de la catégorie
+                sex_label = "Filles" if sex == "F" else "Garçons"
+                ws.cell(row=row, column=1, value=f"{category} - {sex_label}")
+                ws.cell(row=row, column=1).font = category_font
+                ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=len(columns))
+                row += 1
+
+                # En-têtes
+                for col_idx, col_name in enumerate(columns, 1):
+                    cell = ws.cell(row=row, column=col_idx, value=col_name)
+                    cell.font = header_font
+                    cell.fill = header_fill
+                    cell.border = thin_border
+                    cell.alignment = Alignment(horizontal='center')
+                row += 1
+
+                # Données
+                for result in cat_results:
+                    athlete = next(a for a in self.race.athletes if a.bib == result['bib'])
+
+                    values = [
+                        result['rank'] if result['rank'] else '',
+                        result['bib'],
+                        athlete.first_name,
+                        athlete.last_name,
+                        athlete.team
+                    ]
+
+                    # Ajouter les temps de chaque run
+                    for i in range(1, self.race.config.num_runs + 1):
+                        run_key = f'run{i}'
+                        values.append(result.get(run_key, ''))
+
+                    values.append(result['total_display'])
+                    values.append(result['status'])
+
+                    is_dnf = result['status'] in ('DNF', 'DNS', 'DSQ')
+
+                    for col_idx, value in enumerate(values, 1):
+                        cell = ws.cell(row=row, column=col_idx, value=value)
+                        cell.border = thin_border
+                        if col_idx in [1, 2] or col_idx > len(base_columns):
+                            cell.alignment = Alignment(horizontal='center')
+                        if is_dnf:
+                            cell.fill = dnf_fill
+                    row += 1
+
+                # Ligne vide entre les catégories
+                row += 1
+
+        # Ajuster les largeurs de colonnes
+        ws.column_dimensions['A'].width = 8   # Rang
+        ws.column_dimensions['B'].width = 8   # Bib
+        ws.column_dimensions['C'].width = 15  # Prénom
+        ws.column_dimensions['D'].width = 15  # Nom
+        ws.column_dimensions['E'].width = 20  # Club
+
+        # Colonnes de runs et total
+        col_letters = ['F', 'G', 'H', 'I', 'J', 'K']
+        for i, letter in enumerate(col_letters[:self.race.config.num_runs + 2]):
+            ws.column_dimensions[letter].width = 12
+
+        # S'assurer que le fichier a l'extension .xlsx
+        filepath = str(filepath)
+        if not filepath.endswith('.xlsx'):
+            filepath += '.xlsx'
+
+        # Sauvegarder
+        wb.save(filepath)
+        print(f"Exporté: {filepath}")
