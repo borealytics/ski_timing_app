@@ -167,7 +167,7 @@ class AthleteManagerWindow(tk.Toplevel):
         """Retourne l'athlète sélectionné"""
         selection = self.tree.selection()
         if not selection:
-            messagebox.showwarning("Attention", "Veuillez sélectionner un coureur")
+            messagebox.showwarning("Attention", "Veuillez sélectionner un coureur", parent=self)
             return None
 
         bib = int(selection[0])
@@ -184,13 +184,15 @@ class AthleteManagerWindow(tk.Toplevel):
 
         if athlete.status == 'ABSENT':
             athlete.status = 'ACTIVE'
-            messagebox.showinfo("Succès", f"#{athlete.bib} {athlete.last_name} est maintenant ACTIF")
         else:
             athlete.status = 'ABSENT'
-            messagebox.showinfo("Succès", f"#{athlete.bib} {athlete.last_name} est maintenant ABSENT")
 
         self._populate_list()
         self._notify_update()
+
+        # Resélectionner l'athlète
+        self.tree.selection_set(str(athlete.bib))
+        self.tree.see(str(athlete.bib))
 
     def _change_bib(self):
         """Change le numéro de dossard d'un coureur"""
@@ -213,7 +215,7 @@ class AthleteManagerWindow(tk.Toplevel):
         if new_bib != athlete.bib:
             for a in self.race.athletes:
                 if a.bib == new_bib:
-                    messagebox.showerror("Erreur", f"Le dossard #{new_bib} est déjà attribué à {a.last_name} {a.first_name}")
+                    messagebox.showerror("Erreur", f"Le dossard #{new_bib} est déjà attribué à {a.last_name} {a.first_name}", parent=self)
                     return
 
         old_bib = athlete.bib
@@ -232,9 +234,12 @@ class AthleteManagerWindow(tk.Toplevel):
                 result.bib = new_bib
                 run.results[new_bib] = result
 
-        messagebox.showinfo("Succès", f"Dossard modifié: #{old_bib} -> #{new_bib}")
         self._populate_list()
         self._notify_update()
+
+        # Resélectionner l'athlète avec le nouveau bib
+        self.tree.selection_set(str(new_bib))
+        self.tree.see(str(new_bib))
 
     def _add_athlete(self):
         """Ajoute un nouveau coureur"""
@@ -248,9 +253,12 @@ class AthleteManagerWindow(tk.Toplevel):
             for run in self.race.runs:
                 run.add_athlete(dialog.result)
 
-            messagebox.showinfo("Succès", f"Coureur #{dialog.result.bib} ajouté")
             self._populate_list()
             self._notify_update()
+
+            # Sélectionner le nouvel athlète
+            self.tree.selection_set(str(dialog.result.bib))
+            self.tree.see(str(dialog.result.bib))
 
     def _delete_athlete(self):
         """Supprime un coureur"""
@@ -261,7 +269,8 @@ class AthleteManagerWindow(tk.Toplevel):
         response = messagebox.askyesno(
             "Confirmer suppression",
             f"Voulez-vous vraiment supprimer #{athlete.bib} {athlete.last_name} {athlete.first_name}?\n\n"
-            "Cette action est irréversible."
+            "Cette action est irréversible.",
+            parent=self
         )
 
         if not response:
@@ -276,7 +285,6 @@ class AthleteManagerWindow(tk.Toplevel):
             if athlete.bib in run.results:
                 del run.results[athlete.bib]
 
-        messagebox.showinfo("Succès", f"Coureur #{athlete.bib} supprimé")
         self._populate_list()
         self._notify_update()
 
