@@ -305,18 +305,29 @@ class CSVImporter:
         Returns:
             Liste des colonnes de résultats trouvées
         """
-        # Détecter le séparateur
-        with open(filepath, 'r', encoding='utf-8') as f:
-            first_line = f.readline().strip()
+        # Lire le fichier avec le bon encodage
+        content, encoding = CSVImporter._read_file_with_encoding(filepath)
+        lines = content.strip().split('\n')
 
-        separator = ';' if ';' in first_line else ','
+        if not lines:
+            return []
+
+        first_line = lines[0].strip()
+
+        # Gérer les lignes entourées de guillemets
+        if first_line.startswith('"') and first_line.endswith('"'):
+            first_line = first_line.strip('"')
+
+        separator = CSVImporter._detect_separator(first_line)
+
+        from io import StringIO
 
         if first_line.startswith('#'):
             header = first_line.lstrip('# ').split(separator)
             header = [h.strip() for h in header]
-            df = pd.read_csv(filepath, skiprows=1, names=header, sep=separator, nrows=0)
+            df = pd.read_csv(StringIO('\n'.join(lines[1:])), names=header, sep=separator, nrows=0)
         else:
-            df = pd.read_csv(filepath, sep=separator, nrows=0)
+            df = pd.read_csv(StringIO(content), sep=separator, nrows=0, encoding=encoding)
 
         # Chercher les colonnes de résultats possibles
         result_columns = []
@@ -349,18 +360,30 @@ class CSVImporter:
         Returns:
             Dictionnaire {bib: RunResult}
         """
-        # Détecter le séparateur
-        with open(filepath, 'r', encoding='utf-8') as f:
-            first_line = f.readline().strip()
+        # Lire le fichier avec le bon encodage
+        content, encoding = CSVImporter._read_file_with_encoding(filepath)
+        lines = content.strip().split('\n')
 
-        separator = ';' if ';' in first_line else ','
+        if not lines:
+            return {}
+
+        first_line = lines[0].strip()
+
+        # Gérer les lignes entourées de guillemets
+        if first_line.startswith('"') and first_line.endswith('"'):
+            lines = [line.strip().strip('"') for line in lines]
+            first_line = lines[0]
+
+        separator = CSVImporter._detect_separator(first_line)
+
+        from io import StringIO
 
         if first_line.startswith('#'):
             header = first_line.lstrip('# ').split(separator)
             header = [h.strip() for h in header]
-            df = pd.read_csv(filepath, skiprows=1, names=header, sep=separator)
+            df = pd.read_csv(StringIO('\n'.join(lines[1:])), names=header, sep=separator)
         else:
-            df = pd.read_csv(filepath, sep=separator)
+            df = pd.read_csv(StringIO('\n'.join(lines)), sep=separator)
 
         # Nettoyage - trouver la colonne Bib
         bib_col = None
