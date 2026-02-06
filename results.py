@@ -62,9 +62,12 @@ class ResultsCalculator:
             'status': status
         }
         
-        # Ajouter les temps individuels
-        for i, (time, display) in enumerate(zip(times, time_displays), 1):
-            result_dict[f'run{i}'] = display if display else 'PENDING'
+        # Ajouter les temps individuels (afficher le statut si DSQ/DNF/DNS)
+        for i, (time, display, status) in enumerate(zip(times, time_displays, statuses), 1):
+            if status in ['DNS', 'DNF', 'DSQ']:
+                result_dict[f'run{i}'] = status
+            else:
+                result_dict[f'run{i}'] = display if display else 'PENDING'
             result_dict[f'run{i}_seconds'] = time
         
         return result_dict
@@ -95,8 +98,8 @@ class ResultsCalculator:
             else:
                 return None, 'DNS'
 
-        # Filtrer les temps valides (ignorer DNS, DNF, DSQ)
-        valid_times = [t for t in times if t is not None]
+        # Filtrer les temps valides (ignorer DNS, DNF, DSQ et temps null)
+        valid_times = [t for t, s in zip(times, statuses) if t is not None and s == 'FINISHED']
 
         if method == 'BEST_1':
             if len(valid_times) < 1:

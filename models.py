@@ -62,9 +62,9 @@ class RunResult:
         self.status = "FINISHED"
     
     def set_status(self, status: str):
+        """Change le statut sans effacer le temps enregistré"""
         self.status = status
-        self.time_seconds = None
-        self.time_display = status
+        # Ne plus effacer time_seconds ni time_display pour pouvoir revenir en arrière
     
     def is_valid(self) -> bool:
         return self.status == "FINISHED" and self.time_seconds is not None

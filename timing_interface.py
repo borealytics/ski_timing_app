@@ -314,26 +314,45 @@ class TimingInterface(tk.Toplevel):
         button_frame = ttk.Frame(main_frame)
         button_frame.pack(fill=tk.X, pady=15)
 
-        ttk.Button(
+        # Styles pour boutons de statut (normal et actif/gras)
+        style = ttk.Style()
+        style.configure('Status.TButton', font=('Arial', 10, 'normal'))
+        style.configure('StatusActive.TButton', font=('Arial', 10, 'bold'))
+
+        # Boutons de statut (toggle)
+        self.dns_button = ttk.Button(
             button_frame,
             text="DNS",
-            command=lambda: self._save_status('DNS'),
-            width=8
-        ).pack(side=tk.LEFT, padx=3)
+            command=lambda: self._toggle_status('DNS'),
+            width=8,
+            style='Status.TButton'
+        )
+        self.dns_button.pack(side=tk.LEFT, padx=3)
 
-        ttk.Button(
+        self.dnf_button = ttk.Button(
             button_frame,
             text="DNF",
-            command=lambda: self._save_status('DNF'),
-            width=8
-        ).pack(side=tk.LEFT, padx=3)
+            command=lambda: self._toggle_status('DNF'),
+            width=8,
+            style='Status.TButton'
+        )
+        self.dnf_button.pack(side=tk.LEFT, padx=3)
 
-        ttk.Button(
+        self.dsq_button = ttk.Button(
             button_frame,
             text="DSQ",
-            command=lambda: self._save_status('DSQ'),
-            width=8
-        ).pack(side=tk.LEFT, padx=3)
+            command=lambda: self._toggle_status('DSQ'),
+            width=8,
+            style='Status.TButton'
+        )
+        self.dsq_button.pack(side=tk.LEFT, padx=3)
+
+        # Dictionnaire pour accès facile aux boutons
+        self._status_buttons = {
+            'DNS': self.dns_button,
+            'DNF': self.dnf_button,
+            'DSQ': self.dsq_button
+        }
 
         ttk.Button(
             button_frame,
@@ -613,8 +632,13 @@ class TimingInterface(tk.Toplevel):
                 else:
                     tag = 'pending'
 
-            # Temps ou status à afficher
-            time_display = result.time_display if result.time_display else '-'
+            # Temps à afficher (toujours montrer le temps s'il existe)
+            if result.time_display:
+                time_display = result.time_display
+            elif result.status in ['DNS', 'DNF', 'DSQ']:
+                time_display = '-'  # Pas de temps enregistré
+            else:
+                time_display = '-'
 
             # Indicateur de statut
             status_icon = ''
@@ -673,26 +697,24 @@ class TimingInterface(tk.Toplevel):
         self._updating_fields = True
         self._sec_invalid = False
         self.sec_entry.configure(style='TEntry')
-        if result and result.status != 'PENDING':
-            if result.status == 'FINISHED':
-                # Parser le temps pour pré-remplir
-                time_str = result.time_display
-                if ':' in time_str:
-                    parts = time_str.split(':')
-                    self.min_var.set(parts[0])
-                    sec_parts = parts[1].split('.')
-                    self.sec_var.set(sec_parts[0])
-                    self.cent_var.set(sec_parts[1])
-            else:
-                self.min_var.set('')
-                self.sec_var.set('')
-                self.cent_var.set('')
+
+        # Afficher le temps s'il existe (même avec statut DSQ/DNF/DNS)
+        if result and result.time_display and ':' in result.time_display:
+            time_str = result.time_display
+            parts = time_str.split(':')
+            self.min_var.set(parts[0])
+            sec_parts = parts[1].split('.')
+            self.sec_var.set(sec_parts[0])
+            self.cent_var.set(sec_parts[1])
         else:
             # Vider les champs
             self.min_var.set('')
             self.sec_var.set('')
             self.cent_var.set('')
         self._updating_fields = False
+
+        # Mettre à jour les boutons de statut
+        self._update_status_buttons(result)
 
         # Focus sur le premier champ
         self.min_entry.focus()
@@ -852,21 +874,46 @@ class TimingInterface(tk.Toplevel):
         self.current_index += 1
         self._update_display()
 
-    def _save_status(self, status: str):
-        """Enregistre un statut spécial (DNS, DNF, DSQ)"""
+    def _update_status_buttons(self, result):
+        """Met à jour l'apparence des boutons de statut selon le résultat actuel"""
+        current_status = result.status if result else 'PENDING'
+
+        for status, button in self._status_buttons.items():
+            if current_status == status:
+                # Bouton actif - texte en gras
+                button.configure(style='StatusActive.TButton')
+            else:
+                # Bouton inactif - texte normal
+                button.configure(style='Status.TButton')
+
+    def _toggle_status(self, status: str):
+        """Toggle un statut spécial (DNS, DNF, DSQ)"""
         athlete = self.run.athletes[self.current_index]
 
-        result = RunResult(bib=athlete.bib)
-        result.set_status(status)
+        # Récupérer le résultat existant
+        result = self.run.get_result(athlete.bib)
+        if result is None:
+            result = RunResult(bib=athlete.bib)
+
+        if result.status == status:
+            # Désactiver le statut - revenir à FINISHED si temps existe, sinon PENDING
+            if result.time_seconds is not None:
+                result.status = 'FINISHED'
+            else:
+                result.status = 'PENDING'
+        else:
+            # Activer ce statut
+            result.set_status(status)
+
         self.run.set_result(athlete.bib, result)
 
         # Sauvegarde automatique
         if self.on_save:
             self.on_save()
 
-        # Passer au suivant
-        self.current_index += 1
-        self._update_display()
+        # Mettre à jour l'affichage (sans changer de coureur)
+        self._update_status_buttons(result)
+        self._update_athlete_list()
 
     def _prev_athlete(self):
         """Revenir au coureur précédent"""
