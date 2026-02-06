@@ -48,3 +48,9 @@ Thumbs.db
 podiums_*.xlsx
 course_*.xlsx
 results_*.xlsx
+
+# Temporary/local files
+PROJET_COMPLET.md
+test_import.py
+test_data/create\ _race.csv
+test_data/resultats_complets_test.xlsx
