@@ -212,7 +212,56 @@ class TimingInterface(tk.Toplevel):
         # Séparateur
         ttk.Separator(main_frame, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=5)
 
-        # Zone d'information coureur
+        # Zone d'information coureur EN ATTENTE (prochain)
+        self.next_athlete_frame = ttk.LabelFrame(main_frame, text="EN ATTENTE", padding="8")
+        self.next_athlete_frame.pack(fill=tk.X, pady=(5, 2))
+
+        # Conteneur pour infos du prochain coureur
+        next_info_frame = ttk.Frame(self.next_athlete_frame)
+        next_info_frame.pack(fill=tk.X)
+
+        self.next_bib_label = ttk.Label(
+            next_info_frame,
+            text="",
+            font=('Arial', 14, 'bold')
+        )
+        self.next_bib_label.pack(side=tk.LEFT)
+
+        self.next_name_label = ttk.Label(
+            next_info_frame,
+            text="",
+            font=('Arial', 12)
+        )
+        self.next_name_label.pack(side=tk.LEFT, padx=10)
+
+        self.next_info_label = ttk.Label(
+            next_info_frame,
+            text="",
+            font=('Arial', 10)
+        )
+        self.next_info_label.pack(side=tk.LEFT, padx=10)
+
+        # Frame pour les alertes du prochain coureur
+        self.next_alert_frame = ttk.Frame(self.next_athlete_frame)
+        self.next_alert_frame.pack(fill=tk.X, pady=(3, 0))
+
+        self.next_category_alert_label = ttk.Label(
+            self.next_alert_frame,
+            text="",
+            font=('Arial', 9, 'bold'),
+            foreground='#856404',
+            background='#fff3cd'
+        )
+
+        self.next_slow_alert_label = ttk.Label(
+            self.next_alert_frame,
+            text="",
+            font=('Arial', 9, 'bold'),
+            foreground='white',
+            background='#dc3545'
+        )
+
+        # Zone d'information coureur ACTIF
         athlete_frame = ttk.LabelFrame(main_frame, text="COUREUR ACTIF", padding="15")
         athlete_frame.pack(fill=tk.X, pady=10)
 
@@ -512,20 +561,21 @@ class TimingInterface(tk.Toplevel):
             self.cent_var.set(filtered)
             self._updating_fields = False
 
-    def _get_category_position(self, athlete) -> tuple:
+    def _get_category_position(self, athlete, from_index=None) -> tuple:
         """Retourne (position, total, label) du coureur dans sa catégorie+sexe parmi ceux restants"""
         category = athlete.category
         sex = athlete.sex
 
-        # Trouver tous les coureurs de la même catégorie ET sexe pas encore chronométrés
+        if from_index is None:
+            from_index = self.current_index
+
+        # Trouver tous les coureurs de la même catégorie ET sexe à partir de l'index donné
         remaining = []
         for i, a in enumerate(self.run.athletes):
-            if a.category == category and a.sex == sex:
-                result = self.run.get_result(a.bib)
-                if result.status == 'PENDING':
-                    remaining.append((i, a))
+            if i >= from_index and a.category == category and a.sex == sex:
+                remaining.append((i, a))
 
-        # Trouver la position du coureur actuel parmi les restants
+        # Trouver la position du coureur parmi les restants
         position = None
         for pos, (idx, a) in enumerate(remaining):
             if a.bib == athlete.bib:
@@ -600,6 +650,45 @@ class TimingInterface(tk.Toplevel):
             from utils import format_time_msscc
             self.slow_alert_label.config(text=f"  LENT ({format_time_msscc(athlete_time)})  ")
             self.slow_alert_label.pack(side=tk.LEFT, padx=5)
+
+    def _update_next_athlete(self):
+        """Met à jour l'affichage du coureur en attente (prochain)"""
+        next_index = self.current_index + 1
+
+        # Cacher les alertes du prochain coureur
+        self.next_category_alert_label.pack_forget()
+        self.next_slow_alert_label.pack_forget()
+
+        if next_index >= len(self.run.athletes):
+            # Pas de prochain coureur
+            self.next_bib_label.config(text="")
+            self.next_name_label.config(text="(aucun)")
+            self.next_info_label.config(text="")
+            return
+
+        next_athlete = self.run.athletes[next_index]
+
+        # Mettre à jour les infos
+        self.next_bib_label.config(text=f"#{next_athlete.bib}")
+        self.next_name_label.config(text=f"{next_athlete.last_name} {next_athlete.first_name}")
+        self.next_info_label.config(text=f"{next_athlete.category} - {next_athlete.sex} - {next_athlete.team}")
+
+        # Vérifier position dans la catégorie+sexe (à partir du prochain coureur)
+        position, total, label = self._get_category_position(next_athlete, from_index=next_index)
+        if position and total:
+            if position == total and total > 0:
+                self.next_category_alert_label.config(text=f"  DERNIER {label}  ")
+                self.next_category_alert_label.pack(side=tk.LEFT, padx=3)
+            elif position == total - 1 and total > 1:
+                self.next_category_alert_label.config(text=f"  AVANT-DERNIER {label}  ")
+                self.next_category_alert_label.pack(side=tk.LEFT, padx=3)
+
+        # Vérifier si coureur lent (runs 2+)
+        is_slow, athlete_time, category_avg = self._is_slow_runner(next_athlete)
+        if is_slow and athlete_time:
+            from utils import format_time_msscc
+            self.next_slow_alert_label.config(text=f"  LENT ({format_time_msscc(athlete_time)})  ")
+            self.next_slow_alert_label.pack(side=tk.LEFT, padx=3)
 
     def _update_athlete_list(self):
         """Met à jour la liste des coureurs"""
@@ -689,6 +778,9 @@ class TimingInterface(tk.Toplevel):
         # Mettre à jour les alertes (dernier de catégorie, coureur lent)
         self._update_alerts(athlete)
 
+        # Mettre à jour le coureur en attente (prochain)
+        self._update_next_athlete()
+
         # Progression
         completed, total = self.run.get_completion_rate()
         self.progress_label.config(text=f"[{completed}/{total}]")
@@ -763,8 +855,18 @@ class TimingInterface(tk.Toplevel):
         total_seconds = minutes * 60 + seconds + centiseconds / 100
         time_display = format_time_msscc(total_seconds)
 
-        result = RunResult(bib=athlete.bib)
-        result.set_time(total_seconds, time_display)
+        # Récupérer le résultat existant pour conserver le statut si DSQ/DNF/DNS
+        result = self.run.get_result(athlete.bib)
+        if result is None:
+            result = RunResult(bib=athlete.bib)
+
+        # Si le statut est DSQ/DNF/DNS, ne pas écraser - juste mettre à jour le temps
+        if result.status in ['DNS', 'DNF', 'DSQ']:
+            result.time_seconds = total_seconds
+            result.time_display = time_display
+        else:
+            result.set_time(total_seconds, time_display)
+
         self.run.set_result(athlete.bib, result)
 
         # Sauvegarde automatique
@@ -861,8 +963,10 @@ class TimingInterface(tk.Toplevel):
         total_seconds = minutes * 60 + seconds + centiseconds / 100
         time_display = format_time_msscc(total_seconds)
 
-        # Enregistrer
-        result = RunResult(bib=athlete.bib)
+        # Enregistrer (récupérer le résultat existant ou en créer un nouveau)
+        result = self.run.get_result(athlete.bib)
+        if result is None:
+            result = RunResult(bib=athlete.bib)
         result.set_time(total_seconds, time_display)
         self.run.set_result(athlete.bib, result)
 
@@ -894,6 +998,22 @@ class TimingInterface(tk.Toplevel):
         result = self.run.get_result(athlete.bib)
         if result is None:
             result = RunResult(bib=athlete.bib)
+
+        # Sauvegarder le temps saisi dans les champs (s'il y en a un valide)
+        min_val = self.min_entry.get().strip()
+        sec_val = self.sec_entry.get().strip()
+        cent_val = self.cent_entry.get().strip()
+
+        if min_val or sec_val or cent_val:
+            valid, error = validate_time_input(min_val, sec_val, cent_val)
+            if valid:
+                minutes = int(min_val or 0)
+                seconds = int(sec_val or 0)
+                centiseconds = int(cent_val or 0)
+                total_seconds = minutes * 60 + seconds + centiseconds / 100
+                time_display = format_time_msscc(total_seconds)
+                result.time_seconds = total_seconds
+                result.time_display = time_display
 
         if result.status == status:
             # Désactiver le statut - revenir à FINISHED si temps existe, sinon PENDING

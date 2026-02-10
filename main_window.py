@@ -55,6 +55,7 @@ class MainWindow(tk.Tk):
         file_menu.add_command(label="Nouvelle Course", command=self._new_race)
         file_menu.add_command(label="Ouvrir Course", command=self._open_race)
         file_menu.add_command(label="Sauvegarder", command=self._save_race)
+        file_menu.add_command(label="Sauvegarder sous...", command=self._save_race_as)
         file_menu.add_separator()
         file_menu.add_command(label="Quitter", command=self.quit)
         
@@ -132,11 +133,15 @@ class MainWindow(tk.Tk):
         if not self.race:
             messagebox.showwarning("Attention", "Aucune course à sauvegarder")
             return
-        
+
         if not self.current_file:
+            # Proposer le nom de la course comme nom de fichier par défaut
+            default_name = self.race.config.race_name.replace(" ", "_") if self.race.config.race_name else "course"
+
             filepath = filedialog.asksaveasfilename(
                 title="Sauvegarder la course",
                 defaultextension=".json",
+                initialfile=default_name,
                 filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
             )
             if not filepath:
@@ -148,7 +153,33 @@ class MainWindow(tk.Tk):
             messagebox.showinfo("Succès", "Course sauvegardée!")
         except Exception as e:
             messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde:\n{e}")
-    
+
+    def _save_race_as(self):
+        """Sauvegarde la course sous un nouveau nom/emplacement"""
+        if not self.race:
+            messagebox.showwarning("Attention", "Aucune course à sauvegarder")
+            return
+
+        # Proposer le nom de la course comme nom de fichier par défaut
+        default_name = self.race.config.race_name.replace(" ", "_") if self.race.config.race_name else "course"
+
+        filepath = filedialog.asksaveasfilename(
+            title="Sauvegarder la course sous...",
+            defaultextension=".json",
+            initialfile=default_name,
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        if not filepath:
+            return
+
+        self.current_file = filepath
+
+        try:
+            self.race.save(self.current_file)
+            messagebox.showinfo("Succès", f"Course sauvegardée sous:\n{filepath}")
+        except Exception as e:
+            messagebox.showerror("Erreur", f"Erreur lors de la sauvegarde:\n{e}")
+
     def _show_import_screen(self):
         """Écran d'import des coureurs"""
         self._clear_main_frame()
